@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" role="img" aria-label="Remote SSH">
+  <g fill="none" stroke="#4c8dff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="5" y="9" width="20" height="14" rx="2.5"/>
+    <rect x="23" y="25" width="20" height="14" rx="2.5"/>
+    <path d="M25 16h6a4 4 0 0 1 4 4v5"/>
+    <path d="M15 16.5l4 3-4 3"/>
+  </g>
+</svg>

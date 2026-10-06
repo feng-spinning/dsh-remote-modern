@@ -1,0 +1,13 @@
+node_modules/
+.test*/
+.ui-fixture-package/
+.fixture-gateway.json
+test-composition.yml
+integration-workspace.json
+test-workspace/
+*.tgz
+
+# Local logs, evidence dumps and OS noise
+*.log
+.DS_Store
+Thumbs.db

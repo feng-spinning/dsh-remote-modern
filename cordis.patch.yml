@@ -1,0 +1,4 @@
+- insert:
+    - id: ssh-remote-modern
+      name: dsh-remote-modern
+      inject: [connection]

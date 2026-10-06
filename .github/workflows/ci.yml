@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: build + test (${{ matrix.os }} / node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: ['24']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      # `lib/` is committed because the Cordis loader imports it directly.
+      # Rebuilding must reproduce it byte for byte.
+      - name: Build
+        run: npm run build
+      - name: Verify committed lib/ matches the build
+        run: git diff --exit-code -- lib
+      - name: Test
+        run: npm test

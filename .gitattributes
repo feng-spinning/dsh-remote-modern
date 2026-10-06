@@ -1,0 +1,12 @@
+# Normalize to LF in the repository and in every working tree, so the
+# committed build output in lib/ stays byte-identical to `npm run build`
+# on all platforms and CI's `git diff --exit-code -- lib` stays meaningful.
+* text=auto eol=lf
+
+# Binary assets must never be line-ending converted.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.tgz binary
+*.ico binary

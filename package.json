@@ -1,6 +1,6 @@
 {
   "name": "dsh-remote-modern",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "SSH remote backends for DeepSeek Harness: connect the Web/Desktop client to a persistent dsh backend on a remote host, with the remote workspace, sessions, files and terminals served by that host.",
   "keywords": [
     "dsh",
@@ -47,6 +47,7 @@
     "build": "node scripts/build.mjs",
     "test": "node --test --test-isolation=none test/*.test.js",
     "test:integration": "node test/supervisor.integration.js",
+    "test:upgrade": "node test/upgrade.integration.js",
     "check": "npm run build && npm test"
   },
   "dsh": {

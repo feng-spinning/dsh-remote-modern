@@ -8,7 +8,7 @@ const emit = patch => { snapshot = { ...snapshot, ...patch }; for (const listene
 const subscribe = listener => { listeners.add(listener); return () => listeners.delete(listener); };
 const useModel = () => useSyncExternalStore(subscribe, () => snapshot);
 let call;
-const phaseText = { installing: '正在安装远端 dsh', starting: '正在启动远端后端', ssh: '正在建立 SSH 隧道' };
+const phaseText = { installing: '正在安装远端 dsh', starting: '正在启动远端后端', upgrading: '检测到远端升级，正在重连', restarting: '正在重启升级后的远端后端', ssh: '正在建立 SSH 隧道' };
 const stateText = { connected: '已连接', connecting: '连接中', reconnecting: '正在重连', disconnected: '未连接' };
 const button = { border: '1px solid var(--border-color, #ddd)', borderRadius: 8, padding: '7px 12px', background: 'transparent', color: 'inherit', cursor: 'pointer', font: 'inherit' };
 const inputStyle = { width: '100%', boxSizing: 'border-box', background: 'transparent', color: 'inherit', border: '1px solid #9995', borderRadius: 8, padding: '10px 12px', font: 'inherit' };
@@ -17,7 +17,8 @@ async function refresh() {
   try {
     const result = await call('list');
     const active = snapshot.active;
-    emit({ hosts: result.hosts, warnings: result.warnings, ...(active && result.hosts.some(host => host.id === active.id && host.state === 'connected') ? { active: { ...active, ready: true } } : {}) });
+    const host = active && result.hosts.find(host => host.id === active.id);
+    emit({ hosts: result.hosts, warnings: result.warnings, ...(active ? { active: { ...active, ready: host?.state === 'connected', revision: host?.revision || 0 } } : {}) });
   }
   catch (e) { emit({ error: e.message }); }
 }
@@ -117,7 +118,7 @@ function Overlay() {
   const guestBridge = desktop && window.dshDesktop?.protocolVersion === 1 && window.dshDesktop.browser;
   const native = desktop && !!window.dshSSHRemote;
   const [frameEpoch, setFrameEpoch] = useState(0);
-  useEffect(() => { setFrameEpoch(x => x + 1); }, [model.active?.id]);
+  useEffect(() => { setFrameEpoch(x => x + 1); }, [model.active?.id, model.active?.revision]);
   useEffect(() => {
     if (!model.picker) return;
     const close = event => { if (event.key === 'Escape') emit({ picker: false }); };

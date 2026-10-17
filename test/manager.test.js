@@ -19,8 +19,10 @@ test('connect pooling, stable gateway, reconnect and remote lifetime survive dis
   const [first, second] = await Promise.all([manager.connect(host.id), manager.connect(host.id)]);
   await until(() => manager.status(host.id).state === 'connected');
   assert.equal(opened, 1); assert.equal(first.url, second.url);
+  assert.equal(manager.status(host.id).revision, 1);
   transportClose(); await until(() => manager.status(host.id).state === 'connected' && opened === 2);
   assert.equal((await manager.connect(host.id)).url, first.url);
+  assert.equal(manager.status(host.id).revision, 2);
   assert.equal(JSON.stringify(await manager.list()).includes('remote-secret'), false);
   await manager.disconnect(host.id); assert.equal(manager.status(host.id).state, 'disconnected'); assert.ok(closed >= 2);
   assert.equal((await fetch(`http://127.0.0.1:${backend.port}/?token=remote-secret`, { redirect: 'manual' })).status, 303);

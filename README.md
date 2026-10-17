@@ -83,7 +83,7 @@ dsh plugin --profile web add github:feng-spinning/dsh-remote-modern
 
 # From a packed tarball
 npm pack
-dsh plugin --profile web add file:/absolute/path/to/dsh-remote-modern-0.1.5.tgz
+dsh plugin --profile web add file:/absolute/path/to/dsh-remote-modern-0.1.6.tgz
 
 # From a source checkout you intend to edit (symlinked)
 dsh plugin --profile web add link:/absolute/path/to/dsh-remote-modern
@@ -113,13 +113,21 @@ position. Refresh recreates the view, and disconnect releases it and the local
 tunnel. Older clients use the companion `dshSSHRemote` bridge when available,
 otherwise an external-browser link remains available.
 
-After upgrading the remote global DSH installation, restart the connector-owned
-Web backend as well. Closing the Desktop view or SSH tunnel leaves that backend
-running. The connector records the CLI path and installation fingerprint and
-refuses to reuse a live stale endpoint; it does not kill remote jobs automatically.
-On the remote host, inspect `~/.dsh-remote-modern/endpoint.json`, verify that its
-`pid` is the connector bootstrap process running with `--serve`, then send that
-supervisor `SIGTERM` and reconnect. Do not stop unrelated DSH processes.
+While connected, the plugin checks the remote installation every five seconds.
+After two changed samples it reconnects, waits for a stable installation, and
+automatically restarts the connector-owned Web backend. Reconnection also checks
+for upgrades made while disconnected. Linux process ownership, parent/child
+commands, data home and recorded process start times are verified before sending
+SIGTERM. Concurrent clients share one restart under the attach lock. A successful
+reconnect reauthenticates the gateway and reloads the embedded page.
+
+This restart can interrupt work running in that Web backend; saved conversations
+remain in the same data directory. Disconnecting alone still leaves the backend
+running. Unknown DSH versions outside the declared remote compatibility range,
+unverifiable process ownership or a shutdown timeout stop automatic replacement
+with a visible error. The plugin never silently downgrades an unsupported global
+version or force-kills an unresponsive process. Upgrade support currently targets
+remote `0.2.1-rc.2`; future DSH releases still require compatibility validation.
 
 ## Usage
 

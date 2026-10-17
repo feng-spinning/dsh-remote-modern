@@ -55,7 +55,7 @@ export async function unusedPort() {
 export async function bootstrapCommand() {
   const source = await readFile(new URL('./remote-bootstrap.cjs', import.meta.url));
   const hash = (await import('node:crypto')).createHash('sha256').update(source).digest('hex');
-  const shell = `set -eu; umask 077; ${runtimePrelude}command -v node >/dev/null || { echo 'Remote Node.js >=24 is required' >&2; exit 127; }; mkdir -p "$HOME/.dsh-remote-modern/bootstrap"; IFS= read -r payload; printf '%s' "$payload" | base64 -d > "$HOME/.dsh-remote-modern/bootstrap/${hash}.cjs"; node "$HOME/.dsh-remote-modern/bootstrap/${hash}.cjs"; cat >/dev/null`;
+  const shell = `set -eu; umask 077; ${runtimePrelude}command -v node >/dev/null || { echo 'Remote Node.js >=24 is required' >&2; exit 127; }; mkdir -p "$HOME/.dsh-remote-modern/bootstrap"; IFS= read -r payload; printf '%s' "$payload" | base64 -d > "$HOME/.dsh-remote-modern/bootstrap/${hash}.cjs"; exec node "$HOME/.dsh-remote-modern/bootstrap/${hash}.cjs" --watch`;
   return { command: "sh -c '" + shell.replaceAll("'", "'\\''") + "'", payload: source.toString('base64') + '\n' };
 }
 export async function openTunnel(host, { onProgress = () => {}, onClose = () => {}, spawnProcess = spawn, timeout = 720000, sshExecutable = defaultSshExecutable(), signal } = {}) {
@@ -88,7 +88,14 @@ export async function openTunnel(host, { onProgress = () => {}, onClose = () => 
       let index;
       while ((index = buffer.indexOf('\n')) >= 0) {
         const line = buffer.slice(0, index).trim(); buffer = buffer.slice(index + 1);
-        if (line.startsWith('DSH_SSH_PROGRESS ')) onProgress(line.slice(17));
+        if (line.startsWith('DSH_SSH_PROGRESS ')) {
+          const phase = line.slice(17);
+          onProgress(phase);
+          // OpenSSH may stay alive after the remote command exits while an
+          // existing WebSocket keeps a forwarding channel open. End our local
+          // carrier explicitly so the manager reconnects even in that case.
+          if (phase === 'upgrading') child.kill();
+        }
         if (line.startsWith('DSH_SSH_READY ')) {
           try {
             const endpoint = JSON.parse(line.slice(14));

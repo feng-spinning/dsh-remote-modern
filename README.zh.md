@@ -51,7 +51,7 @@ dsh plugin --profile web add github:feng-spinning/dsh-remote-modern
 
 # 从打包好的 tarball 安装
 npm pack
-dsh plugin --profile web add file:/绝对路径/dsh-remote-modern-0.1.5.tgz
+dsh plugin --profile web add file:/绝对路径/dsh-remote-modern-0.1.6.tgz
 
 # 从准备修改的源码目录安装（软链接）
 dsh plugin --profile web add link:/绝对路径/dsh-remote-modern
@@ -73,7 +73,9 @@ dsh web
 
 ## 使用
 
-远端全局 DSH 升级后，也需要重启插件管理的 Web 后端；仅关闭 Desktop 视图或 SSH 隧道不会停止该后端。插件会记录 CLI 路径与安装指纹，拒绝复用仍存活的旧 endpoint，不会自动终止远端任务。若提示后端过期，请在远端检查 `~/.dsh-remote-modern/endpoint.json`，核验其中 `pid` 确实是带 `--serve` 的插件 bootstrap 进程，向该 supervisor 发送 `SIGTERM` 后重新连接。不要停止无关 DSH 进程。
+连接期间每 5 秒检查远端安装，连续两次发现变化后自动重连；重新连接也会检查离线期间的升级。插件先等待安装文件稳定，再核验 Linux 进程用户、supervisor 与子进程命令、父子关系、数据目录和已记录的启动时间，向对应 supervisor 发送 SIGTERM，等待退出后启动新后端。并发连接共用 attach 锁，仅进行一次重启；重连完成后重新认证网关并刷新内嵌页面。
+
+自动重启可能中断该 Web 后端正在执行的任务，已保存会话仍使用原数据目录。普通「断开」依旧不停止后端。进程归属无法核验、停止超时或远端版本超出兼容范围时显示明确错误；不强杀进程，不把未知全局版本静默降级。目前远端兼容目标为 `0.2.1-rc.2`，未来 DSH 版本仍需验证适配。
 
 1. 在终端执行一次 `ssh <主机>`，确认主机指纹并验证密钥认证。
 2. 从侧栏或设置页打开**远程连接**。

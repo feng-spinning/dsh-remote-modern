@@ -8,6 +8,16 @@ All notable changes to this plugin are documented here. The format follows
 code is unchanged from the `0.1.2` build; only packaging, manifests and
 documentation were adapted for redistribution.
 
+## 0.1.6 — 2026-10-17
+
+- Monitor the remote runtime while connected; after a stable installation change,
+  reconnect and automatically restart only the verified connector-owned backend.
+- Serialize replacement across concurrent clients and wait for graceful shutdown;
+  do not force-kill processes, restart unknown owners or downgrade unsupported DSH.
+- Reauthenticate the gateway and refresh the embedded page after reconnecting.
+- Add Linux upgrade lifecycle coverage, including partial installs, private fallback
+  avoidance, concurrent restart and disconnect persistence.
+
 ## 0.1.5 — 2026-10-17
 
 - Target remote DSH `0.2.1-rc.2` and record the actual CLI installation identity.

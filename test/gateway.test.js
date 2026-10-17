@@ -1,9 +1,52 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { request } from 'node:http';
+import { request, createServer } from 'node:http';
 import { randomBytes } from 'node:crypto';
+import { connect } from 'node:net';
 import { Gateway } from '../src/gateway.js';
-import { fakeBackend, login } from './helpers.js';
+import { fakeBackend, login, sleep } from './helpers.js';
+
+test('a browser reset during an upstream WebSocket handshake is handled', async t => {
+  let accepted, upstream;
+  const pending=new Promise(resolve=>accepted=resolve);
+  const server=createServer((req,res)=>{res.writeHead(303,{'set-cookie':'fixture=yes',location:'/'});res.end();});
+  server.on('upgrade',(req,socket)=>{upstream=socket;socket.on('error',()=>{});accepted();});
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  const port=server.address().port;
+  const gateway=await new Gateway().start();
+  t.after(()=>new Promise(resolve=>{upstream?.destroy();server.closeAllConnections();server.close(resolve);}));t.after(()=>gateway.close());
+  await gateway.attach({port,endpoint:{port,token:'fixture'}});
+  const cookie=await login(gateway), address=new URL(gateway.origin);
+  const browser=connect(Number(address.port),'127.0.0.1');browser.on('error',()=>{});
+  await new Promise(resolve=>browser.once('connect',resolve));
+  browser.write(`GET /mux HTTP/1.1\r\nHost: ${address.host}\r\nCookie: ${cookie}\r\nConnection: Upgrade\r\nUpgrade: websocket\r\n\r\n`);
+  await pending; browser.resetAndDestroy();
+  await sleep(50);
+});
+
+test('an upstream reset during a streamed response does not crash the host and the gateway can reattach', async t => {
+  let upstream;
+  const server = createServer((req,res) => {
+    if (req.url.startsWith('/?token=')) {res.writeHead(303,{'set-cookie':'fixture=yes',location:'/'});res.end();return;}
+    res.writeHead(200,{'content-type':'text/event-stream'}); res.write('data: connected\n\n'); upstream=res.socket;
+  });
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  const port=server.address().port;
+  const gateway=await new Gateway().start();
+  t.after(()=>new Promise(resolve=>{server.closeAllConnections();server.close(resolve);}));
+  t.after(()=>gateway.close());
+  await gateway.attach({port,endpoint:{port,token:'fixture'}});
+  const cookie=await login(gateway);
+  const response=await fetch(gateway.origin+'/events',{headers:{cookie}});
+  const reader=response.body.getReader();
+  await reader.read();
+  const failed=assert.rejects(reader.read());
+  upstream.resetAndDestroy();
+  await failed;
+  const replacement=await fakeBackend();t.after(()=>replacement.close());
+  await gateway.attach(replacement);
+  assert.equal((await fetch(gateway.origin,{headers:{cookie}})).status,200);
+});
 
 test('gateway authenticates locally and rewrites authority/cookies without leaking remote token', async t => {
   const backend = await fakeBackend(), gateway = await new Gateway().start();

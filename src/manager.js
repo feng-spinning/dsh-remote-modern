@@ -24,7 +24,7 @@ export class RemoteManager {
   }
   status(id) {
     const entry = this.connections.get(id);
-    return { state: entry?.state || 'disconnected', phase: entry?.phase || '', error: entry?.error || '', connectedAt: entry?.connectedAt || null };
+    return { state: entry?.state || 'disconnected', phase: entry?.phase || '', error: entry?.error || '', connectedAt: entry?.connectedAt || null, revision: entry?.revision || 0 };
   }
   async save(input) {
     const target = validateTarget(input?.target);
@@ -85,7 +85,7 @@ export class RemoteManager {
         if (entry.stopped) { tunnel.close(); return; }
         await entry.gateway.attach(tunnel);
         if (entry.stopped) { tunnel.close(); entry.gateway.detach(); return; }
-        entry.tunnel = tunnel; entry.state = 'connected'; entry.phase = ''; entry.error = ''; entry.attempt = 0; entry.connectedAt = new Date().toISOString();
+        entry.tunnel = tunnel; entry.state = 'connected'; entry.phase = ''; entry.error = ''; entry.attempt = 0; entry.connectedAt = new Date().toISOString(); entry.revision = (entry.revision || 0) + 1;
       } catch (e) {
         tunnel?.close(); entry.gateway.detach(); entry.error = e.message;
         entry.state = entry.stopped ? 'disconnected' : 'reconnecting';

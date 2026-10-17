@@ -30,3 +30,6 @@ jobs:
         run: git diff --exit-code -- lib
       - name: Test
         run: npm test
+      - name: Linux upgrade lifecycle
+        if: runner.os == 'Linux'
+        run: npm run test:upgrade

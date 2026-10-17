@@ -70,8 +70,12 @@ export class Gateway {
     req.pipe(proxy);
   }
   #upgrade(req, socket, head) {
+    // The browser can reset an upgraded socket before the upstream handshake
+    // finishes (especially during SSH replacement). Handle errors immediately.
+    socket.on('error', () => socket.destroy());
     if (!this.#authorized(req) || !this.#upstream) { socket.end('HTTP/1.1 503 Service Unavailable\r\nConnection: close\r\n\r\n'); return; }
     const proxy = httpRequest({ host: '127.0.0.1', port: this.#upstream.port, path: req.url, method: 'GET', headers: this.#headers(req, true) });
+    socket.once('close', () => proxy.destroy());
     proxy.on('upgrade', (res, remote, remoteHead) => {
       this.#sockets.add(remote); remote.once('close', () => this.#sockets.delete(remote));
       socket.write(`HTTP/1.1 ${res.statusCode} ${res.statusMessage}\r\n`);

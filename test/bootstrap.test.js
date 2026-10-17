@@ -6,6 +6,25 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { homedir } from 'node:os';
+
+test('restart ownership requires a connector supervisor, matching child, data home and process start identities', () => {
+  const root = process.env.DSH_REMOTE_MODERN_ROOT || join(homedir(), '.dsh-remote-modern');
+  const cli = join(root, 'runtime', bootstrap.VERSION, 'node_modules/@deepseek-ai/dsh/lib/bin.js');
+  const ep = {pid:101,childPid:102,dataHome:bootstrap.dataHome,cli,version:bootstrap.VERSION,supervisorStart:'10',childStart:'11'};
+  const parent = {pid:101,uid:process.getuid?.(),start:'10',args:['node',join(root,'bootstrap','a'.repeat(64)+'.cjs'),'--serve']};
+  const child = {pid:102,ppid:101,uid:parent.uid,start:'11',args:['node',cli,'--profile','web','--no-open','--host','127.0.0.1','--port','0']};
+  const info = pid => pid === 101 ? parent : pid === 102 ? child : null;
+  assert.ok(bootstrap.ownedProcesses(ep, info));
+  assert.equal(bootstrap.ownedProcesses({...ep,dataHome:'unrelated'}, info), null);
+  assert.equal(bootstrap.ownedProcesses({...ep,childStart:'reused-pid'}, info), null);
+  child.ppid = 999;
+  assert.equal(bootstrap.ownedProcesses(ep, info), null);
+  child.ppid = 101; child.args[1] = '/unrelated/service.js';
+  assert.equal(bootstrap.ownedProcesses(ep, info), null);
+  child.args[1] = cli; parent.args[1] = join(root,'not-bootstrap','a'.repeat(64)+'.cjs');
+  assert.equal(bootstrap.ownedProcesses(ep, info), null);
+});
 test('bootstrap only reuses the current data home and unchanged runtime installation', () => {
   const root = mkdtempSync(join(tmpdir(), 'dsh-runtime-'));
   try {
@@ -39,7 +58,7 @@ test('attach refuses a live stale endpoint without replacing it or stopping its 
       env:{...process.env, DSH_REMOTE_MODERN_ROOT:root, DSH_HOME:root}, encoding:'utf8', timeout:10000, windowsHide:true,
     });
     assert.equal(result.status, 1);
-    assert.match(result.stderr, /backend is stale after a runtime upgrade/);
+    assert.match(result.stderr, /Cannot verify ownership/);
     assert.equal(readFileSync(file,'utf8'), original);
     process.kill(process.pid, 0);
   } finally { rmSync(root, {recursive:true,force:true}); }

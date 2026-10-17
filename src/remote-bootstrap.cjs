@@ -12,15 +12,37 @@ const runtime = path.join(root, 'runtime', VERSION);
 // existing remote dsh installation, including credentials and conversations.
 const state = path.resolve(process.env.DSH_HOME || path.join(os.homedir(), '.dsh'));
 const endpointFile = path.join(root, 'endpoint.json');
+const globalCli = path.resolve(path.dirname(process.execPath), '../lib/node_modules/@deepseek-ai/dsh/lib/bin.js');
+function unsupportedGlobalVersion() {
+  try {
+    const version = JSON.parse(fs.readFileSync(path.resolve(globalCli, '../../package.json'), 'utf8')).version;
+    return ['0.2.0-rc.2', '0.2.1-rc.1', VERSION].includes(version) ? null : version;
+  } catch { return null; }
+}
 function installedCli() {
-  const candidates = [path.join(runtime, 'node_modules/@deepseek-ai/dsh/lib/bin.js'), path.resolve(path.dirname(process.execPath), '../lib/node_modules/@deepseek-ai/dsh/lib/bin.js')];
+  if (unsupportedGlobalVersion()) return null;
+  const candidates = [globalCli, path.join(runtime, 'node_modules/@deepseek-ai/dsh/lib/bin.js')];
   for (const bin of candidates) {
     try { if (fs.existsSync(bin) && JSON.parse(fs.readFileSync(path.resolve(bin, '../../package.json'), 'utf8')).version === VERSION) return bin; } catch {}
   }
   return null;
 }
 const delay = ms => new Promise(r => setTimeout(r, ms));
-function alive(pid) { try { process.kill(pid, 0); return true; } catch { return false; } }
+function processInfo(pid) {
+  if (process.platform !== 'linux' || !Number.isInteger(pid) || pid <= 1) return null;
+  try {
+    const base = '/proc/' + pid;
+    const fields = fs.readFileSync(base + '/stat', 'utf8').split(/\) /).at(-1).split(' ');
+    if (fields[0] === 'Z') return null;
+    return { pid, ppid: Number(fields[1]), start: fields[19], uid: fs.statSync(base).uid,
+      args: fs.readFileSync(base + '/cmdline', 'utf8').split('\0').filter(Boolean) };
+  } catch { return null; }
+}
+function alive(pid) {
+  if (!Number.isInteger(pid) || pid <= 1) return false;
+  if (process.platform === 'linux') return !!processInfo(pid);
+  try { process.kill(pid, 0); return true; } catch { return false; }
+}
 function cliIdentity(bin) {
   if (!bin) return null;
   try {
@@ -37,6 +59,69 @@ function reusableEndpoint(ep, bin = installedCli()) {
   const identity = cliIdentity(bin);
   return !!identity && ep?.version === VERSION && ep.dataHome === state &&
     ep.cli === identity.cli && ep.cliFingerprint === identity.fingerprint && alive(ep.pid) && alive(ep.childPid);
+}
+function ownedProcesses(ep, info = processInfo) {
+  if (!ep || ep.dataHome !== state) return null;
+  const supervisor = info(ep.pid), child = info(ep.childPid);
+  const bootstrap = supervisor?.args[1];
+  const expectedCli = ep.cli || (ep.version && path.join(root, 'runtime', ep.version, 'node_modules/@deepseek-ai/dsh/lib/bin.js'));
+  if (!supervisor || !child || supervisor.uid !== process.getuid?.() || child.uid !== supervisor.uid ||
+    path.dirname(bootstrap || '') !== path.join(root, 'bootstrap') || !/^[a-f0-9]{64}\.cjs$/.test(path.basename(bootstrap || '')) ||
+    supervisor.args.length !== 3 || supervisor.args[2] !== '--serve' || child.ppid !== supervisor.pid ||
+    (ep.supervisorStart && supervisor.start !== ep.supervisorStart) || (ep.childStart && child.start !== ep.childStart) ||
+    !(child.args[1] === expectedCli || (!ep.cli && child.args[1] === globalCli)) ||
+    JSON.stringify(child.args.slice(2)) !== JSON.stringify(['--profile', 'web', '--no-open', '--host', '127.0.0.1', '--port', '0'])) return null;
+  return { supervisor, child };
+}
+async function stopStaleEndpoint(ep) {
+  if (!alive(ep.pid) && !alive(ep.childPid)) return;
+  const owned = ownedProcesses(ep);
+  if (!owned) throw new Error('Cannot verify ownership of the stale remote backend; no process was stopped. Inspect ~/.dsh-remote-modern/endpoint.json.');
+  console.log('DSH_SSH_PROGRESS restarting');
+  // Signal only the verified supervisor; it forwards SIGTERM to its own child.
+  process.kill(owned.supervisor.pid, 'SIGTERM');
+  for (let i = 0; i < 100; i++) {
+    const parent = processInfo(ep.pid), child = processInfo(ep.childPid);
+    if (parent?.start !== owned.supervisor.start && child?.start !== owned.child.start) return;
+    await delay(200);
+  }
+  throw new Error('Remote backend did not stop within 20 seconds; no replacement was started.');
+}
+async function stableRuntime(previousEndpoint) {
+  let previous, samples = 0;
+  for (let i = 0; i < 60; i++) {
+    // A temporarily absent global installation must not switch a running
+    // global backend to an older private copy during npm's replacement window.
+    const identity = previousEndpoint?.cli === globalCli ? cliIdentity(globalCli) : cliIdentity(installedCli());
+    const globalVersion = unsupportedGlobalVersion();
+    if (globalVersion) {
+      throw new Error('Unsupported remote DSH version ' + globalVersion + '; update this plugin before reconnecting. No backend was stopped or downgraded.');
+    }
+    const key = identity && JSON.stringify(identity);
+    samples = key && key === previous ? samples + 1 : 0;
+    if (samples >= 2) return identity;
+    previous = key;
+    await delay(1000);
+  }
+  throw new Error('Remote dsh installation is still changing or incomplete; reconnect will retry after installation finishes.');
+}
+async function watchEndpoint(ep) {
+  let ended = false, changes = 0;
+  const end = () => { ended = true; };
+  process.stdin.once('end', end); process.stdin.resume();
+  try {
+    while (!ended) {
+      await delay(5000);
+      if (ended) break;
+      if (reusableEndpoint(ep)) { changes = 0; continue; }
+      if (++changes < 2) continue;
+      console.log('DSH_SSH_PROGRESS upgrading');
+      // Closing this carrier invokes the manager's normal reconnect path. Its
+      // next attach takes the remote lock before stopping/replacing the backend.
+      process.exitCode = 75;
+      return;
+    }
+  } finally { process.stdin.off('end', end); process.stdin.pause(); }
 }
 function modelEnvironment() {
   const env = { ...process.env, DSH_HOME: state };
@@ -74,7 +159,9 @@ async function serve() {
       const match = /^dsh web: (http:\/\/127\.0\.0\.1:\d+\/?\?token=[^\s]+)/.exec(line);
       if (match) {
         const url = new URL(match[1]);
-        writeEndpoint({ version: VERSION, dataHome: state, cli: identity.cli, cliFingerprint: identity.fingerprint, pid: process.pid, childPid: child.pid, port: Number(url.port), token: url.searchParams.get('token') });
+        writeEndpoint({ version: VERSION, dataHome: state, cli: identity.cli, cliFingerprint: identity.fingerprint, pid: process.pid, childPid: child.pid,
+          supervisorStart: processInfo(process.pid)?.start, childStart: processInfo(child.pid)?.start,
+          port: Number(url.port), token: url.searchParams.get('token') });
         process.stdout.write('Remote Web backend ready\n');
       } else process.stdout.write(line + '\n');
     }
@@ -108,11 +195,12 @@ async function attach() {
     let ep = endpoint();
     if (reusableEndpoint(ep)) {
       // Readiness is also checked by the client through the forwarded HTTP carrier.
-      console.log('DSH_SSH_READY ' + JSON.stringify(ep)); return;
+      console.log('DSH_SSH_READY ' + JSON.stringify(ep)); return ep;
     }
-    if (ep && (alive(ep.pid) || alive(ep.childPid))) {
-      throw new Error('Remote dsh backend is stale after a runtime upgrade. Stop the connector-owned supervisor recorded in ~/.dsh-remote-modern/endpoint.json, then reconnect. Closing the Desktop view alone does not restart it.');
-    }
+    // Never install a fallback while a live runtime is being overwritten.
+    const live = ep && (alive(ep.pid) || alive(ep.childPid));
+    if (live && !ownedProcesses(ep)) throw new Error('Cannot verify ownership of the stale remote backend; no process was stopped. Inspect ~/.dsh-remote-modern/endpoint.json.');
+    if (unsupportedGlobalVersion() || (live && !installedCli())) await stableRuntime(ep);
     if (!installedCli()) {
       console.log('DSH_SSH_PROGRESS installing');
       fs.mkdirSync(runtime, { recursive: true, mode: 0o700 });
@@ -121,6 +209,8 @@ async function attach() {
       });
       if (install.error || install.status !== 0) throw new Error('Private dsh installation failed: ' + (install.error?.message || install.status));
     }
+    await stableRuntime(ep);
+    if (ep) await stopStaleEndpoint(ep);
     fs.mkdirSync(state, { recursive: true, mode: 0o700 });
     const log = fs.openSync(path.join(root, 'backend.log'), 'a', 0o600);
     const supervisor = spawn(process.execPath, [__filename, '--serve'], { detached: true, stdio: ['ignore', log, log] });
@@ -128,12 +218,12 @@ async function attach() {
     console.log('DSH_SSH_PROGRESS starting');
     for (let i = 0; i < 180; i++) {
       ep = endpoint();
-      if (ep?.pid === supervisor.pid && alive(ep.childPid)) { console.log('DSH_SSH_READY ' + JSON.stringify(ep)); return; }
+      if (ep?.pid === supervisor.pid && alive(ep.childPid)) { console.log('DSH_SSH_READY ' + JSON.stringify(ep)); return ep; }
       if (!alive(supervisor.pid)) throw new Error('Remote backend failed to start; inspect ~/.dsh-remote-modern/backend.log');
       await delay(500);
     }
     throw new Error('Remote backend startup timed out; inspect ~/.dsh-remote-modern/backend.log');
   } finally { fs.rmSync(lock, { recursive: true, force: true }); }
 }
-if (require.main === module) (process.argv.includes('--serve') ? serve() : attach()).catch(e => { console.error(e.message); process.exitCode = 1; });
-module.exports = { VERSION, attach, serve, installedCli, cliIdentity, reusableEndpoint, dataHome: state };
+if (require.main === module) (process.argv.includes('--serve') ? serve() : attach().then(ep => process.argv.includes('--watch') ? watchEndpoint(ep) : undefined)).catch(e => { console.error(e.message); process.exitCode = 1; });
+module.exports = { VERSION, attach, serve, installedCli, cliIdentity, reusableEndpoint, ownedProcesses, stopStaleEndpoint, processInfo, dataHome: state };

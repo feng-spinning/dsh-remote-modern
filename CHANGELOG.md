@@ -8,6 +8,32 @@ All notable changes to this plugin are documented here. The format follows
 code is unchanged from the `0.1.2` build; only packaging, manifests and
 documentation were adapted for redistribution.
 
+## 0.1.4 — 2026-10-17
+
+- Accept DSH `0.2.1-rc.2` in the local runtime compatibility declaration.
+- Embed SSH backends through the official Desktop `dshDesktop.browser` guest
+  lease and sandboxed webview, without patching the application archive.
+- Keep the remote document mounted when returning to local; release it on
+  disconnect, host change, refresh, or plugin unload.
+- Retain the legacy native bridge and Web iframe paths.
+- Add guest lifecycle tests for cancellation, reuse, host changes and cleanup.
+
+## 0.1.3
+
+### Added
+
+- Local client support for DeepSeek Harness `0.2.1-rc.1` in addition to
+  `0.2.0-rc.2`: `engines.dsh` now accepts both runtimes, so the 0.2.1 plugin
+  manager no longer rejects the package as incompatible. The public client APIs
+  used here (`ctx.slots.inject/register` with a list-slot `id`/`order`/`label`,
+  `ctx.connection.rpc.call`, `window.__ModuleLoader__` and
+  `ctx.connection.fetch.register`) are unchanged in 0.2.1.
+
+### Changed
+
+- The remote backend remains pinned to dsh `0.2.0-rc.2`, because the pin also
+  selects the runtime installed on hosts that have no matching CLI yet.
+
 ## [0.1.2]
 
 ### Fixed

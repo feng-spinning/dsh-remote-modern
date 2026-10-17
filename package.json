@@ -1,6 +1,6 @@
 {
   "name": "dsh-remote-modern",
-  "version": "0.1.2",
+  "version": "0.1.4",
   "description": "SSH remote backends for DeepSeek Harness: connect the Web/Desktop client to a persistent dsh backend on a remote host, with the remote workspace, sessions, files and terminals served by that host.",
   "keywords": [
     "dsh",
@@ -25,7 +25,7 @@
   },
   "engines": {
     "node": ">=24",
-    "dsh": "0.2.0-rc.2"
+    "dsh": "0.2.0-rc.2 || 0.2.1-rc.1 || 0.2.1-rc.2"
   },
   "main": "./src/plugin.js",
   "exports": {

@@ -12,9 +12,12 @@ Desktop clients to a persistent dsh backend running on a remote host, so the
 remote machine's workspace, sessions, files and terminal are what the GUI
 operates on. Switching between local and remote is one click in the sidebar.
 
-> **Compatibility.** This release targets dsh `0.2.0-rc.2` exactly. The remote
-> connector installs and verifies that precise version, and refuses an endpoint
-> that reports anything else. See
+> **Compatibility.** The local plugin accepts dsh `0.2.0-rc.2`,
+> `0.2.1-rc.1` and `0.2.1-rc.2`. Desktop 0.2.1 uses its built-in native
+> browser bridge; embedding on 0.2.0 requires the companion `dshSSHRemote`
+> shell extension. The remote connector still installs and verifies dsh
+> `0.2.0-rc.2` on the remote host, and refuses an endpoint that reports
+> anything else. See
 > [Porting to another DSH version](#porting-to-another-dsh-version).
 
 ## Features
@@ -48,7 +51,7 @@ operates on. Switching between local and remote is one click in the sidebar.
 
 Local machine:
 
-- **DeepSeek Harness `0.2.0-rc.2`** (Web or Desktop).
+- **DeepSeek Harness `0.2.0-rc.2`, `0.2.1-rc.1` or `0.2.1-rc.2`** (Web or Desktop).
 - **Node.js 24 or newer** with **pnpm** available on `PATH` — required by
   `dsh plugin`.
 - **OpenSSH** on `PATH`. On Windows the plugin prefers
@@ -80,7 +83,7 @@ dsh plugin --profile web add github:feng-spinning/dsh-remote-modern
 
 # From a packed tarball
 npm pack
-dsh plugin --profile web add file:/absolute/path/to/dsh-remote-modern-0.1.2.tgz
+dsh plugin --profile web add file:/absolute/path/to/dsh-remote-modern-0.1.4.tgz
 
 # From a source checkout you intend to edit (symlinked)
 dsh plugin --profile web add link:/absolute/path/to/dsh-remote-modern
@@ -99,11 +102,16 @@ it matches a fresh build.
 
 ### Desktop
 
-The Desktop application owns its `desktop` profile and registers the plugins it
-ships. Do **not** point `dsh plugin --profile desktop` at a replacement
-directory while the app is running: the desktop profile is exclusively managed,
-and CLI writes to it are rejected. Change Desktop's plugin set through the
-application's own plugin settings.
+Install the tarball through Desktop's own plugin manager. If it reports that a
+restart is required, quit and reopen Desktop. The ordinary Web CLI does not
+launch the reserved `desktop` profile.
+
+Desktop 0.2.1 embeds the selected SSH host using its built-in
+`dshDesktop.browser` lease and isolated webview. No `app.asar` patch is needed.
+Returning to local hides the remote page; reopening the same host preserves its
+position. Refresh recreates the view, and disconnect releases it and the local
+tunnel. Older clients use the companion `dshSSHRemote` bridge when available,
+otherwise an external-browser link remains available.
 
 ## Usage
 
@@ -202,8 +210,9 @@ not copied from the local machine. No shell configuration file is modified.
 
 - **Linux remote hosts only.** macOS and Windows remote hosts are unverified;
   the probe rejects them.
-- **Exact-version coupling.** The connector installs and accepts only dsh
-  `0.2.0-rc.2`.
+- **Exact-version coupling.** The connector installs and accepts only remote dsh
+  `0.2.0-rc.2`. Local runtime versions are listed in the compatibility section;
+  future Desktop versions require checking the native browser interface again.
 - **No remote stop button.** Disconnecting is local-only by design; stopping the
   backend requires inspecting `endpoint.json` for the recorded PIDs on the
   remote host.
@@ -236,9 +245,9 @@ update all of them and re-run `npm run check`:
 
 | File | What to change |
 |---|---|
-| `src/remote-bootstrap.cjs` | `const VERSION = '0.2.0-rc.2'` |
-| `src/tunnel.js` | the `endpoint.version !== '0.2.0-rc.2'` compatibility check |
-| `package.json` | `engines.dsh`, and the `description` if it names a version |
+| `src/remote-bootstrap.cjs` | `const VERSION = '0.2.0-rc.2'` (remote backend) |
+| `src/tunnel.js` | the `endpoint.version !== '0.2.0-rc.2'` compatibility check (remote backend) |
+| `package.json` | `engines.dsh` (local client support), and the `description` if it names a version |
 | `test/helpers.js` | the fake endpoint `version` |
 | `test/manager.test.js` | the `bootstrapCommand()` assertion on the embedded version |
 | `test/supervisor.integration.js` | the `runtime/<version>/node_modules` path |

@@ -2,7 +2,7 @@
 // by the host platform table; no private runtime or DOM injection is required.
 const h = React.createElement;
 const { useState, useEffect, useRef, useSyncExternalStore } = React;
-let snapshot = { hosts: [], warnings: [], active: null, picker: false, error: '', probes: {}, probing: null };
+let snapshot = { hosts: [], warnings: [], active: null, remoteVisible: false, picker: false, error: '', probes: {}, probing: null };
 const listeners = new Set();
 const emit = patch => { snapshot = { ...snapshot, ...patch }; for (const listener of listeners) listener(); };
 const subscribe = listener => { listeners.add(listener); return () => listeners.delete(listener); };
@@ -23,7 +23,7 @@ async function refresh() {
 }
 async function connect(host) {
   emit({ error: '' });
-  try { const active = await call('connect', { id: host.id }); emit({ active, picker: false }); await refresh(); }
+  try { const active = await call('connect', { id: host.id }); emit({ active: { ...active, ready: active.state === 'connected' }, remoteVisible: true, picker: false }); await refresh(); }
   catch (e) { emit({ error: e.message }); }
 }
 function Dot({ state }) {
@@ -32,7 +32,7 @@ function Dot({ state }) {
 function HostList() {
   const model = useModel();
   return h('div', null,
-    h('button', { style: { ...button, width: '100%', textAlign: 'left', marginBottom: 12 }, onClick: () => emit({ active: null, picker: false }) }, '⌂  本地', h('small', { style: { display: 'block', opacity: 0.65, marginTop: 4 } }, '使用本机工作区和会话')),
+    h('button', { style: { ...button, width: '100%', textAlign: 'left', marginBottom: 12 }, onClick: () => emit({ remoteVisible: false, picker: false }) }, '⌂  本地', h('small', { style: { display: 'block', opacity: 0.65, marginTop: 4 } }, '使用本机工作区和会话')),
     model.hosts.map(host => h('div', { key: host.id, style: { padding: '13px 0', borderTop: '1px solid #9993', display: 'flex', alignItems: 'center', gap: 12 } },
       h('div', { style: { flex: 1, minWidth: 0 } }, h('strong', null, h(Dot, { state: host.state }), host.label),
         h('div', { style: { fontSize: 12, opacity: 0.65, marginTop: 5 } }, host.target, ' · ', phaseText[host.phase] || stateText[host.state]),
@@ -44,7 +44,7 @@ function HostList() {
       } }, model.probing === host.id ? '检测中…' : '只读检测'),
       h('button', { style: button, onClick: () => connect(host) }, host.state === 'connected' ? '打开' : host.state === 'connecting' || host.state === 'reconnecting' ? '查看连接' : '连接'),
       host.state !== 'disconnected' && h('button', { style: button, onClick: async () => {
-        try { await call('disconnect', { id: host.id }); if (snapshot.active?.id === host.id) emit({ active: null }); await refresh(); } catch (e) { emit({ error: e.message }); }
+        try { await call('disconnect', { id: host.id }); if (snapshot.active?.id === host.id) emit({ active: null, remoteVisible: false }); await refresh(); } catch (e) { emit({ error: e.message }); }
       } }, '断开'))),
     Object.entries(model.probes).map(([id, result]) => h('div', { key: id, role: 'status', style: { fontSize: 12, padding: 12, borderRadius: 8, background: '#9991', marginTop: 8 } },
       h('strong', null, model.hosts.find(host => host.id === id)?.label, '：', result.message),
@@ -76,7 +76,16 @@ function HostsPage() {
 function Launcher({ owner }) {
   const model = useModel();
   const active = model.hosts.find(h => h.id === model.active?.id);
-  return h('button', { title: '远程连接', 'aria-label': '远程连接', style: { ...button, width: '100%', textAlign: 'left', border: 0, padding: owner?.wide ? '7px 12px' : '7px 4px', fontSize: owner?.wide ? 14 : 10, whiteSpace: 'nowrap' }, onClick: () => emit({ picker: true }) }, owner?.wide && h(Dot, { state: active?.state }), owner?.wide ? model.active?.label || '远程连接' : 'SSH');
+  return h('button', { title: '远程连接', 'aria-label': '远程连接', style: { ...button, width: '100%', textAlign: 'left', border: 0, padding: owner?.wide ? '7px 12px' : '7px 4px', fontSize: owner?.wide ? 14 : 10, whiteSpace: 'nowrap' }, onClick: () => emit({ picker: true }) }, owner?.wide && h(Dot, { state: active?.state }), owner?.wide ? (model.remoteVisible && model.active?.label) || '远程连接' : 'SSH');
+}
+function DesktopGuestRemote({ active, epoch, bridge }) {
+  const container = useRef(null);
+  useEffect(() => {
+    const guest = new DesktopRemoteGuest(bridge, document, error => emit({ error }), url => window.open(url, '_blank', 'noopener,noreferrer'));
+    void guest.open(container.current, active).catch(error => { guest.close(); emit({ error: error.message }); });
+    return () => guest.close();
+  }, [bridge, active.id, active.url, epoch]);
+  return h('div', { ref: container, style: { display: 'flex', flex: 1, minHeight: 0, minWidth: 0 }, 'aria-label': `${active.label} Desktop 远端视图` });
 }
 function NativeRemote({ active, visible, epoch }) {
   const container = useRef(null);
@@ -105,6 +114,7 @@ function Overlay() {
   const model = useModel();
   const activeHost = model.hosts.find(h => h.id === model.active?.id);
   const desktop = location.protocol === 'file:' || location.protocol === 'dsh-app:';
+  const guestBridge = desktop && window.dshDesktop?.protocolVersion === 1 && window.dshDesktop.browser;
   const native = desktop && !!window.dshSSHRemote;
   const [frameEpoch, setFrameEpoch] = useState(0);
   useEffect(() => { setFrameEpoch(x => x + 1); }, [model.active?.id]);
@@ -114,15 +124,16 @@ function Overlay() {
     window.addEventListener('keydown', close); return () => window.removeEventListener('keydown', close);
   }, [model.picker]);
   return h(React.Fragment, null,
-    model.active && h('div', { style: { ...panel, position: 'fixed', inset: 0, top: desktop && document.documentElement.dataset.platform === 'win32' ? 'var(--dsh-windows-titlebar-height, 40px)' : 0, zIndex: 1800, background: 'var(--bg-primary, #fafafa)', display: 'flex', flexDirection: 'column' } },
+    model.active && h('div', { style: { ...panel, position: 'fixed', inset: 0, top: desktop && document.documentElement.dataset.platform === 'win32' ? 'var(--dsh-windows-titlebar-height, 40px)' : 0, zIndex: 1800, background: 'var(--bg-primary, #fafafa)', display: model.remoteVisible ? 'flex' : 'none', flexDirection: 'column' } },
       h('div', { style: { height: 46, padding: '0 16px', display: 'flex', alignItems: 'center', gap: 14, borderBottom: '1px solid #9993', flexShrink: 0 } },
         h('button', { style: button, onClick: () => emit({ picker: true }) }, h(Dot, { state: activeHost?.state }), model.active.label, ' ▾'),
         h('span', { role: 'status', style: { fontSize: 12, opacity: 0.65, flex: 1 } }, phaseText[activeHost?.phase] || stateText[activeHost?.state] || '连接中', ' · SSH 远端'),
         h('button', { style: button, onClick: () => setFrameEpoch(x => x + 1) }, '刷新视图'),
-        h('button', { style: button, onClick: () => emit({ active: null }) }, '返回本地')),
+        h('button', { style: button, onClick: () => emit({ remoteVisible: false }) }, '返回本地')),
       model.error && h('div', { role: 'alert', style: { padding: 10, color: '#bd553a' } }, model.error),
-      native && model.active.ready ? h(NativeRemote, { active: model.active, visible: !model.picker, epoch: frameEpoch })
-      : desktop && !native ? h('div', { style: { margin: 'auto', textAlign: 'center', maxWidth: 440, padding: 24 } },
+      guestBridge && model.active.ready ? h(DesktopGuestRemote, { active: model.active, epoch: frameEpoch, bridge: guestBridge })
+      : native && model.active.ready ? h(NativeRemote, { active: model.active, visible: model.remoteVisible && !model.picker, epoch: frameEpoch })
+      : desktop && !native && !guestBridge ? h('div', { style: { margin: 'auto', textAlign: 'center', maxWidth: 440, padding: 24 } },
         h('h2', null, model.active.label),
         h('p', { style: { lineHeight: 1.8, opacity: 0.65 } }, '远端后端通过独立浏览器窗口打开。连接由 Desktop 插件维护，关闭浏览器后远端会话仍会保留。'),
         h('a', { href: model.active.url, target: '_blank', rel: 'noopener noreferrer', style: { ...button, display: 'inline-block' } }, '打开远端工作区'))
@@ -146,6 +157,6 @@ function apply(ctx) {
   ctx.slots.inject('settings.section', () => ctx.slots.register({ name: 'settings.section', id: 'ssh-remote-modern', order: 16, label: '远程连接' }, HostsPage));
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({ name: 'shell.overlay', id: 'ssh-remote-modern', order: 1 }, Overlay));
   const timer = setInterval(refresh, 2000);
-  ctx.on('dispose', () => { clearInterval(timer); emit({ active: null, picker: false }); });
+  ctx.on('dispose', () => { clearInterval(timer); emit({ active: null, remoteVisible: false, picker: false }); });
   void refresh();
 }

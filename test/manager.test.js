@@ -35,7 +35,7 @@ test('save transactions preserve concurrently added hosts and invalid destinatio
   for (const target of ['-oProxyCommand=bad', 'user@host; rm -rf /', 'host\ncommand', 'host command']) assert.throws(() => validateTarget(target));
   assert.equal(validateTarget('user@host-name'), 'user@host-name');
   await assert.rejects(manager.save({ target: 'a', port: 70000 }));
-  const boot = await bootstrapCommand(); assert.match(boot.command, /sh -c/); assert.ok(Buffer.from(boot.payload.trim(), 'base64').toString().includes("VERSION = '0.2.0-rc.2'"));
+  const boot = await bootstrapCommand(); assert.match(boot.command, /sh -c/); assert.ok(Buffer.from(boot.payload.trim(), 'base64').toString().includes("VERSION = '0.2.1-rc.2'"));
   assert.ok(sshOptions({ probe: true }).includes('ClearAllForwardings=yes'));
   assert.match(runtimePrelude, /\.nvm\/versions\/node/);
 });

@@ -4,7 +4,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const { spawn, spawnSync } = require('node:child_process');
-const VERSION = '0.2.0-rc.2';
+const { createHash } = require('node:crypto');
+const VERSION = '0.2.1-rc.2';
 const root = process.env.DSH_REMOTE_MODERN_ROOT || path.join(os.homedir(), '.dsh-remote-modern');
 const runtime = path.join(root, 'runtime', VERSION);
 // Backend lifecycle belongs to this connector; user data belongs to the
@@ -20,8 +21,22 @@ function installedCli() {
 }
 const delay = ms => new Promise(r => setTimeout(r, ms));
 function alive(pid) { try { process.kill(pid, 0); return true; } catch { return false; } }
-function reusableEndpoint(ep) {
-  return ep?.version === VERSION && ep.dataHome === state && alive(ep.pid) && alive(ep.childPid);
+function cliIdentity(bin) {
+  if (!bin) return null;
+  try {
+    const cli = fs.realpathSync(bin);
+    const manifest = path.resolve(cli, '../../package.json');
+    const contents = fs.readFileSync(manifest);
+    if (JSON.parse(contents).version !== VERSION) return null;
+    const fingerprint = createHash('sha256').update(contents).update(fs.readFileSync(cli))
+      .update(String(fs.statSync(manifest).mtimeMs)).digest('hex');
+    return { cli, fingerprint };
+  } catch { return null; }
+}
+function reusableEndpoint(ep, bin = installedCli()) {
+  const identity = cliIdentity(bin);
+  return !!identity && ep?.version === VERSION && ep.dataHome === state &&
+    ep.cli === identity.cli && ep.cliFingerprint === identity.fingerprint && alive(ep.pid) && alive(ep.childPid);
 }
 function modelEnvironment() {
   const env = { ...process.env, DSH_HOME: state };
@@ -45,6 +60,8 @@ function writeEndpoint(value) {
 async function serve() {
   const bin = installedCli();
   if (!bin) throw new Error('No matching dsh CLI is installed');
+  const identity = cliIdentity(bin);
+  if (!identity) throw new Error('The dsh installation changed before startup; reconnect to retry.');
   const child = spawn(process.execPath, [bin, '--profile', 'web', '--no-open', '--host', '127.0.0.1', '--port', '0'], {
     env: modelEnvironment(), stdio: ['ignore', 'pipe', 'pipe'],
   });
@@ -57,7 +74,7 @@ async function serve() {
       const match = /^dsh web: (http:\/\/127\.0\.0\.1:\d+\/?\?token=[^\s]+)/.exec(line);
       if (match) {
         const url = new URL(match[1]);
-        writeEndpoint({ version: VERSION, dataHome: state, pid: process.pid, childPid: child.pid, port: Number(url.port), token: url.searchParams.get('token') });
+        writeEndpoint({ version: VERSION, dataHome: state, cli: identity.cli, cliFingerprint: identity.fingerprint, pid: process.pid, childPid: child.pid, port: Number(url.port), token: url.searchParams.get('token') });
         process.stdout.write('Remote Web backend ready\n');
       } else process.stdout.write(line + '\n');
     }
@@ -93,6 +110,9 @@ async function attach() {
       // Readiness is also checked by the client through the forwarded HTTP carrier.
       console.log('DSH_SSH_READY ' + JSON.stringify(ep)); return;
     }
+    if (ep && (alive(ep.pid) || alive(ep.childPid))) {
+      throw new Error('Remote dsh backend is stale after a runtime upgrade. Stop the connector-owned supervisor recorded in ~/.dsh-remote-modern/endpoint.json, then reconnect. Closing the Desktop view alone does not restart it.');
+    }
     if (!installedCli()) {
       console.log('DSH_SSH_PROGRESS installing');
       fs.mkdirSync(runtime, { recursive: true, mode: 0o700 });
@@ -116,4 +136,4 @@ async function attach() {
   } finally { fs.rmSync(lock, { recursive: true, force: true }); }
 }
 if (require.main === module) (process.argv.includes('--serve') ? serve() : attach()).catch(e => { console.error(e.message); process.exitCode = 1; });
-module.exports = { VERSION, attach, serve, installedCli, reusableEndpoint, dataHome: state };
+module.exports = { VERSION, attach, serve, installedCli, cliIdentity, reusableEndpoint, dataHome: state };

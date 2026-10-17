@@ -92,7 +92,7 @@ export async function openTunnel(host, { onProgress = () => {}, onClose = () => 
         if (line.startsWith('DSH_SSH_READY ')) {
           try {
             const endpoint = JSON.parse(line.slice(14));
-            if (endpoint.version !== '0.2.0-rc.2' || !Number.isInteger(endpoint.port) || endpoint.port < 1 || endpoint.port > 65535 || typeof endpoint.token !== 'string' || !endpoint.token) throw new Error('远端后端返回了不兼容的 endpoint');
+            if (endpoint.version !== '0.2.1-rc.2' || !Number.isInteger(endpoint.port) || endpoint.port < 1 || endpoint.port > 65535 || typeof endpoint.token !== 'string' || !endpoint.token) throw new Error('远端后端返回了不兼容的 endpoint');
             clearTimeout(timer); resolve(endpoint);
           } catch (e) { child.kill(); fail(e); }
         }

@@ -9,7 +9,7 @@
 
 为 **DeepSeek Harness** 提供的 SSH 远端后端插件。它把 Web 和 Desktop 客户端连接到运行在远端主机上的持久 dsh 后端，因此 GUI 操作的就是远端机器的工作区、会话、文件和终端。侧栏一键即可在本地与远端之间切换。
 
-> **兼容性。** 本机插件接受 dsh `0.2.0-rc.2`、`0.2.1-rc.1` 和 `0.2.1-rc.2`。Desktop 0.2.1 使用应用内置的原生浏览器接口；旧版 0.2.0 内嵌需要配套的 `dshSSHRemote` 壳扩展。远端连接器仍然只安装并校验 dsh `0.2.0-rc.2`，遇到其他版本的 endpoint 会拒绝复用。参见[移植到其他 DSH 版本](#移植到其他-dsh-版本)。
+> **兼容性。** 本机插件接受 dsh `0.2.0-rc.2`、`0.2.1-rc.1` 和 `0.2.1-rc.2`。Desktop 0.2.1 使用应用内置的原生浏览器接口；旧版 0.2.0 内嵌需要配套的 `dshSSHRemote` 壳扩展。远端连接器只安装并校验 dsh `0.2.1-rc.2`，遇到其他版本的 endpoint 会拒绝复用。参见[移植到其他 DSH 版本](#移植到其他-dsh-版本)。
 
 ## 功能
 
@@ -51,7 +51,7 @@ dsh plugin --profile web add github:feng-spinning/dsh-remote-modern
 
 # 从打包好的 tarball 安装
 npm pack
-dsh plugin --profile web add file:/绝对路径/dsh-remote-modern-0.1.4.tgz
+dsh plugin --profile web add file:/绝对路径/dsh-remote-modern-0.1.5.tgz
 
 # 从准备修改的源码目录安装（软链接）
 dsh plugin --profile web add link:/绝对路径/dsh-remote-modern
@@ -72,6 +72,8 @@ dsh web
 在 0.2.1 Desktop 中，点击「远程连接」→ 主机的「连接」，远端工作区显示在应用内。顶部「返回本地」隐藏远端页面，重新打开同一主机保留页面位置；「刷新视图」重建页面，「断开」释放页面及本机隧道。实现使用官方 `dshDesktop.browser` 租约和隔离分区，无需修改或替换 `app.asar`。没有该接口的旧版客户端继续使用配套壳扩展；两者均不存在时提供外部浏览器入口。
 
 ## 使用
+
+远端全局 DSH 升级后，也需要重启插件管理的 Web 后端；仅关闭 Desktop 视图或 SSH 隧道不会停止该后端。插件会记录 CLI 路径与安装指纹，拒绝复用仍存活的旧 endpoint，不会自动终止远端任务。若提示后端过期，请在远端检查 `~/.dsh-remote-modern/endpoint.json`，核验其中 `pid` 确实是带 `--serve` 的插件 bootstrap 进程，向该 supervisor 发送 `SIGTERM` 后重新连接。不要停止无关 DSH 进程。
 
 1. 在终端执行一次 `ssh <主机>`，确认主机指纹并验证密钥认证。
 2. 从侧栏或设置页打开**远程连接**。
@@ -135,7 +137,7 @@ SOCKS 转发                  建立在单个 ssh 进程的动态转发之上
 ## 已知限制
 
 - **仅支持 Linux 远端。** macOS 和 Windows 远端未经验证，只读检测会拒绝它们。
-- **版本强耦合。** 连接器只安装并接受远端 dsh `0.2.0-rc.2`；本机客户端版本范围见兼容性声明。升级后需重新核对原生浏览器接口。
+- **版本强耦合。** 连接器只安装并接受远端 dsh `0.2.1-rc.2`；本机客户端版本范围见兼容性声明。升级后需重新核对原生浏览器接口。
 - **没有远端停止按钮。** 按设计，断开只作用于本机；停止后端需要在远端根据 `endpoint.json` 记录的 PID 自行确认进程身份后处理。
 - **不是纯前端扩展。** 插件依赖本机 dsh 后端运行，且该后端必须仅监听 loopback。
 - **没有服务化持久。** 远端 supervisor 是用户进程，不承诺机器重启后自动恢复。
@@ -152,8 +154,8 @@ SOCKS 转发                  建立在单个 ssh 进程的动态转发之上
 
 | 文件 | 需要修改的内容 |
 |---|---|
-| `src/remote-bootstrap.cjs` | `const VERSION = '0.2.0-rc.2'`（远端后端） |
-| `src/tunnel.js` | `endpoint.version !== '0.2.0-rc.2'` 兼容性检查（远端后端） |
+| `src/remote-bootstrap.cjs` | `const VERSION = '0.2.1-rc.2'`（远端后端） |
+| `src/tunnel.js` | `endpoint.version !== '0.2.1-rc.2'` 兼容性检查（远端后端） |
 | `package.json` | `engines.dsh`（本机客户端支持范围），以及 `description` 中提到的版本 |
 | `test/helpers.js` | 模拟 endpoint 的 `version` |
 | `test/manager.test.js` | 对 `bootstrapCommand()` 内嵌版本的断言 |

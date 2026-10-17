@@ -25,7 +25,7 @@ export async function fakeBackend() {
   });
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   const port = server.address().port;
-  return { calls, port, endpoint: { port, token: 'remote-secret', version: '0.2.0-rc.2' }, async close() { for (const socket of sockets) socket.destroy(); await new Promise(resolve => server.close(resolve)); } };
+  return { calls, port, endpoint: { port, token: 'remote-secret', version: '0.2.1-rc.2' }, async close() { for (const socket of sockets) socket.destroy(); await new Promise(resolve => server.close(resolve)); } };
 }
 export async function login(gateway) {
   const result = await fetch(gateway.entryUrl(), { redirect: 'manual' });

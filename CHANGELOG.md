@@ -8,6 +8,14 @@ All notable changes to this plugin are documented here. The format follows
 code is unchanged from the `0.1.2` build; only packaging, manifests and
 documentation were adapted for redistribution.
 
+## 0.1.5 — 2026-10-17
+
+- Target remote DSH `0.2.1-rc.2` and record the actual CLI installation identity.
+- Reject stale live endpoints after an in-place runtime upgrade, including older
+  endpoints without identity metadata, instead of serving mixed-version modules.
+- Report the required supervisor restart without automatically stopping jobs or
+  launching another backend over the same data home.
+
 ## 0.1.4 — 2026-10-17
 
 - Accept DSH `0.2.1-rc.2` in the local runtime compatibility declaration.

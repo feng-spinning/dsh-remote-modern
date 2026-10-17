@@ -2,4 +2,4 @@ dsh-remote-modern derives its SOCKS forwarding and SSH config discovery from
 Yan-Zero/dsh-remote-ssh, commit 21d727cbe24fbae283196e5101adb3de2bdd9157,
 licensed under Apache-2.0. The original TypeScript files are retained with
 their original source comments. Other modules implement a new adapter for
-the official DeepSeek Harness 0.2.0-rc.2 Web backend.
+the official DeepSeek Harness 0.2.1-rc.2 Web backend.

@@ -7,7 +7,7 @@ import { login, until } from './helpers.js';
 const project = resolve(import.meta.dirname, '..');
 const root = await mkdtemp(join(project, '.test-supervisor-'));
 const packageRoot = process.env.DSH_TEST_CLI_PACKAGE || join(process.env.APPDATA, 'npm/node_modules/@deepseek-ai/dsh');
-const nodeModules = join(root, 'runtime/0.2.0-rc.2/node_modules/@deepseek-ai');
+const nodeModules = join(root, 'runtime/0.2.1-rc.2/node_modules/@deepseek-ai');
 await mkdir(nodeModules, { recursive: true });
 await symlink(packageRoot, join(nodeModules, 'dsh'), 'junction');
 const bootstrap = join(project, 'src/remote-bootstrap.cjs');

@@ -16,7 +16,7 @@ operates on. Switching between local and remote is one click in the sidebar.
 > `0.2.1-rc.1` and `0.2.1-rc.2`. Desktop 0.2.1 uses its built-in native
 > browser bridge; embedding on 0.2.0 requires the companion `dshSSHRemote`
 > shell extension. The remote connector still installs and verifies dsh
-> `0.2.0-rc.2` on the remote host, and refuses an endpoint that reports
+> `0.2.1-rc.2` on the remote host, and refuses an endpoint that reports
 > anything else. See
 > [Porting to another DSH version](#porting-to-another-dsh-version).
 
@@ -83,7 +83,7 @@ dsh plugin --profile web add github:feng-spinning/dsh-remote-modern
 
 # From a packed tarball
 npm pack
-dsh plugin --profile web add file:/absolute/path/to/dsh-remote-modern-0.1.4.tgz
+dsh plugin --profile web add file:/absolute/path/to/dsh-remote-modern-0.1.5.tgz
 
 # From a source checkout you intend to edit (symlinked)
 dsh plugin --profile web add link:/absolute/path/to/dsh-remote-modern
@@ -112,6 +112,14 @@ Returning to local hides the remote page; reopening the same host preserves its
 position. Refresh recreates the view, and disconnect releases it and the local
 tunnel. Older clients use the companion `dshSSHRemote` bridge when available,
 otherwise an external-browser link remains available.
+
+After upgrading the remote global DSH installation, restart the connector-owned
+Web backend as well. Closing the Desktop view or SSH tunnel leaves that backend
+running. The connector records the CLI path and installation fingerprint and
+refuses to reuse a live stale endpoint; it does not kill remote jobs automatically.
+On the remote host, inspect `~/.dsh-remote-modern/endpoint.json`, verify that its
+`pid` is the connector bootstrap process running with `--serve`, then send that
+supervisor `SIGTERM` and reconnect. Do not stop unrelated DSH processes.
 
 ## Usage
 
@@ -211,7 +219,7 @@ not copied from the local machine. No shell configuration file is modified.
 - **Linux remote hosts only.** macOS and Windows remote hosts are unverified;
   the probe rejects them.
 - **Exact-version coupling.** The connector installs and accepts only remote dsh
-  `0.2.0-rc.2`. Local runtime versions are listed in the compatibility section;
+  `0.2.1-rc.2`. Local runtime versions are listed in the compatibility section;
   future Desktop versions require checking the native browser interface again.
 - **No remote stop button.** Disconnecting is local-only by design; stopping the
   backend requires inspecting `endpoint.json` for the recorded PIDs on the
@@ -245,8 +253,8 @@ update all of them and re-run `npm run check`:
 
 | File | What to change |
 |---|---|
-| `src/remote-bootstrap.cjs` | `const VERSION = '0.2.0-rc.2'` (remote backend) |
-| `src/tunnel.js` | the `endpoint.version !== '0.2.0-rc.2'` compatibility check (remote backend) |
+| `src/remote-bootstrap.cjs` | `const VERSION = '0.2.1-rc.2'` (remote backend) |
+| `src/tunnel.js` | the `endpoint.version !== '0.2.1-rc.2'` compatibility check (remote backend) |
 | `package.json` | `engines.dsh` (local client support), and the `description` if it names a version |
 | `test/helpers.js` | the fake endpoint `version` |
 | `test/manager.test.js` | the `bootstrapCommand()` assertion on the embedded version |

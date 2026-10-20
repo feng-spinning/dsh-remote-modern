@@ -1,5 +1,21 @@
 # 经验记录
 
+## 原生外观必须复用原生组件及其注册生命周期
+
+- 用户纠正：0.2.0 自制侧栏超出“保持默认 UI、只加主机标识”的范围。0.2.1 保留官方组件/store/菜单，仅接入多主机数据。
+- 首个适配候选没有远程目录：它复制原生 children 重新注册，DSH 明确禁止重复声明子插槽，客户端初始化随之失败。修正为装饰原组件 seat 并保留原声明，卸载恢复原函数。回归禁止重新声明 children；实际冷启动出现 tpu、holograms 与主机徽标。
+
+## 链接在中文行文中需要明确结束边界
+
+- 事实：`...hostId=local。只能...` 被宽泛正则整体纳入 URL，授权了错误 hostId，真实远端工具报没有授权。
+- 修正：扫描 URL 字符，遇中文标点停止；完整 query 仍交解析器校验，不能吞掉重复参数错误。加入中文相邻正文和重复 hostId 回归，双向模型分页读取通过。
+
+## 配套插件更新要检查内层结果与运行指纹
+
+- 事实：RPC 信封成功不代表安装成功；DSH rc.2 目录覆盖安装返回 `application=failed / already-installed`，旧工具仍在运行。按官方流程移除并重装本任务配套包后，Node 又保留了旧 node_modules 符号链接 realpath，导致新模块文件被定位到旧目录。
+- 修正：检查安装结果、只更新固定名称的自有配套包，并核验 status revision。使用内容限定文件名和不可变源码目录的绝对 file URL。真实修复后安装 applied、运行指纹匹配；更新不能仅凭文件存在、版本号或 RPC HTTP 200 认定成功。
+- 同版本本机 tgz 覆盖到原路径也可能被 pnpm 判定为 Already up to date，DSH 返回 ambiguous-install。使用每次独立的产物路径并核对哈希、内层 applied 结果，不能用外层 RPC 成功认定已载入新代码。
+
 ## Cordis 的卸载不是名为 dispose 的普通事件
 
 - 事实：连续热安装候选版后，本地引用发送退回草稿；明确输出错误为 `cannot get required service "connection" in inactive context`。当前 Cordis 的卸载运行 effect 的 disposer，没有发出普通 `dispose` 事件。

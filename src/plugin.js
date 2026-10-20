@@ -1,25 +1,18 @@
 import { RemoteManager } from './manager.js';
 import { Federation } from './federation.js';
+import { localHistory } from './session-reader.js';
+import { registerReaderTool } from './reader-tool.js';
 export const name = 'ssh-remote-modern';
-export const inject = ['connection'];
+export const inject = ['connection', 'tools', 'sessionController'];
 export async function apply(ctx) {
   const manager = new RemoteManager();
   return install(ctx, manager);
 }
 export async function install(ctx, manager) {
   await manager.init();
-  const federation = new Federation(manager, {
-    async first(endpoint, args) {
-      const controller = new AbortController();
-      const session = ctx.get('sessionController');
-      if (!session) throw new Error('本机会话服务尚未就绪');
-      try {
-        for await (const value of session.follow(args.request, controller.signal)) return value;
-        throw new Error('本机会话没有返回历史');
-      } finally { controller.abort(); }
-    },
-  });
-  manager.expand = content => federation.expand(content);
+  const federation = new Federation(manager, localHistory(ctx));
+  manager.read = (input, signal) => federation.readPage(input, signal);
+  ctx.effect(() => registerReaderTool(ctx, (input, exec) => federation.readPage(input, exec.signal)));
   const dispatch = async (endpoint, payload) => {
     try {
       let value;
@@ -30,9 +23,13 @@ export async function install(ctx, manager) {
         case 'probe': value = await manager.probe(payload?.id); break;
         case 'disconnect': await manager.disconnect(payload?.id); value = null; break;
         case 'catalog': value = await federation.catalog(payload?.id); break;
+        case 'directory': {
+          const { gateway } = await federation.gateway(payload?.id, true);
+          value = await gateway.call('directoryPicker/list', { path: payload?.path }); break;
+        }
         case 'action': value = await federation.action(payload); break;
         case 'readReference': value = await federation.read(payload); break;
-        case 'expandReferences': value = await federation.expand(payload?.content); break;
+        case 'readPage': value = await federation.readPage(payload); break;
         case 'navigate': {
           const { gateway } = await federation.gateway(payload?.id);
           gateway.navigate(payload); value = null; break;
@@ -40,9 +37,9 @@ export async function install(ctx, manager) {
         default: throw new Error('未知的 SSH 操作');
       }
       return { ok: true, value };
-    } catch (e) { return { ok: false, error: { code: 'ssh-remote', message: e.message, details: {} } }; }
+    } catch (e) { return { ok: false, error: e.rpcError || { code: 'ssh-remote', message: e.message, details: {} } }; }
   };
-  for (const endpoint of ['list', 'save', 'probe', 'connect', 'disconnect', 'catalog', 'action', 'readReference', 'expandReferences', 'navigate']) {
+  for (const endpoint of ['list', 'save', 'probe', 'connect', 'disconnect', 'catalog', 'directory', 'action', 'readReference', 'readPage', 'navigate']) {
     ctx.effect(() => ctx.connection.fetch.register({
       path: '/api/sshRemote/' + endpoint, methods: ['POST'], requestBody: 'buffered',
       async fetch(request) {

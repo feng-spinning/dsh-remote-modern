@@ -1,5 +1,22 @@
 # 交接记录
 
+## 2026-10-20：0.2.1 按需读取与原生侧栏（已安装并完成验收）
+
+- 当前授权：用户已自行完成实际验收，确认两端通过 `read_session` 互读且响应迅速，添加工作区流程完整；明确要求不再使用 Computer Use，最后检查后 **git push**。版本为 **0.2.1**，基于 `724842bdceea07b0a7cdc8114c47829c7b6d1975`；本节对应提交包含最终代码、构建产物和记录。
+- 用户要求仅添加远端服务器名和连接点，其余保留 DSH 默认 UI，并保留“添加工作区”的 Local/Remote 选择。已复用当前安装版原生侧栏组件、store、菜单及重命名弹窗；合并多主机数据，移除自制侧栏和远端顶栏。最后实际 Desktop 截图可见本地目录及远端 tpu、holograms，远端旁显示 dahua 和绿色连接点。
+- “添加工作区”已接入原生 Modal 与菜单按钮：Local 调原始本地选择器；Remote 选择 SSH 主机并浏览远端目录。目录 API 实际列出 `/home/fengzj` 的 41 个条目。原生菜单的远端重命名/置顶 API 已实际执行并还原；用户随后确认添加工作区实际流程完整。
+- 两端已注册可分页 `read_session`。固定源 seq，支持长消息字符续页，仅返回真实用户和助手文本，排除推理、工具输出及注入上下文。远端通过既有认证 SSH 网关的受限队列回读 Desktop，只允许读取当前会话已粘贴的确切链接。用户消息正文保持原样，不再追加 `<dsh_session_references>`。
+- 真实模型双向验收已通过：本地模型调用工具 4 页读完远端，远端模型调用工具 6 页读完本地；两端各取回两个随机口令，末页均 `hasMore=false`，仅调用 `read_session`，保存的用户正文与原始提交完全一致。远端配套组件更新后重复调用也通过。专用测试会话 `session-0f894688-747b-4c06-9e2d-e854222c20be`（本地）、`session-6d68f9b1-8e55-4169-a433-91dde5de655b`（dahua）已归档。
+- 旧会话只读核验结论：0.2.0 XML 属于预先附加的截取快照，本地 `session-f2bc7914-…` 的远端来源当时只附了一条助手回复，本地模型后来自行 SSH 查日志；远端 `session-542a14fb-…` 未读取到本地完整日志。旧消息未改写。当前 DSH 原生 `dsh-session:` 为同主机 additionalContext，不解析本插件 hostId 跨主机链接。
+- 原始来源完整性已核对：远端 `session-a6e4223d-…` 的 1095 个事件跨 7 个原生事件页，实际只有 4 条可见用户/助手文本、10572 字符；本地 `session-11486705-46b8-4607-a5a8-16659c95d99d` 为 21 个事件、2 条可见文本、327 字符。分页器与事件内容相符，其余记录主要为工具/运行事件。
+- 构建及 `npm run check` **26 项通过**，`git diff --check` 通过。新增覆盖中文标点链接边界、消息分页/长消息续页、跨主机授权、配套组件更新失败及运行指纹、原生插槽不得重复 children、远端全文索引关闭时保留标题搜索。dahua 的全文索引实际关闭，原生侧栏仍可检索合并的标题/目录；正文全文搜索不可用。
+- 最终安装包：`../../output/dsh-reader-20261020/release/dsh-remote-modern-0.2.1.tgz`，SHA256 `dc44e9e5e132e6a9334d690ac7bc56be5c8da9b07c0a53d46de4014890faa191`。本机插件管理器返回 version 0.2.1、`application=applied`。同版本替换包必须使用新 spec 路径，重复覆盖原 tgz 路径会被 pnpm 视为 Already up to date，DSH 返回 ambiguous-install。
+- dahua 配套 `dsh-remote-session-reader` 已安装并运行；最终连接核验 revision 为 `f73f333abfc9e75d711a71eb98021bb4c3bbc68cedb229e3bcda7dc81ed42fc3`。升级只移除/重装此自有配套包，并核验内层结果；不可变目录的绝对 file URL 避免旧符号链接 realpath 缓存。
+- 验收证据边界：自动化完成双向真实模型、目录及菜单 API、原生侧栏截图核验。Computer Use 点击持续报 `foreground window did not report a process id`，未把 API 成功或截图等同于全部点击通过。用户已自行验收并明确表示无需继续 Computer Use；其实际使用确认补齐最终验收，不逐项推断用户执行过每个菜单动作。
+- 最后无需 Computer Use 的检查：重新构建及 26 项测试全部通过，源码/锁文件/安装包版本均为 0.2.1，29 个打包文件与本机安装内容逐文件哈希一致，打包清单及差异格式检查通过。推送前读取远端 main，与本地基线无分歧。没有在途模型任务或剩余实施事项；后续 GitHub CI 结果以实际运行为准。
+- 本机证据和恢复脚本：`../../output/dsh-reader-20261020/validation-summary.json`（紧凑双向证据）、`e2e-state.json`、`local-history.json`、`remote-history.json`、`raw-audit.json`、`source-*-pages.json`、`check.mjs`、`e2e-reader.mjs`；旧会话核验在 `../../output/dsh-unified-20261020/user-sessions-*.json`。不提交会话日志和凭据。当前 Desktop API authority `127.0.0.1:51307`，进程重启后须重新发现；安装辅助脚本为 `../../output/dsh-unified-20261020/live-check.mjs`。
+- 决策及纠错依据见 [implementation-notes.md](implementation-notes.md) 和 [LESSONS.md](LESSONS.md)。支持 DSH 0.2.1-rc.2；读取正文不含附件/工具结果。切换 guest 的草稿和滚动保留仍不保证。
+
 ## 2026-10-20：统一 SSH 工作区与跨主机会话引用
 
 - 用户授权在本仓库直接开发、安装本机 DSH Desktop 验证后 git push。交付版本 0.2.0，基于 main 0.1.6；仅连接既有 dahua。

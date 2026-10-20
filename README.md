@@ -12,19 +12,19 @@ Desktop clients to a persistent dsh backend running on a remote host, so the
 remote machine's workspace, sessions, files and terminal are what the GUI
 operates on. Switching between local and remote is one click in the sidebar.
 
-> **Compatibility.** Plugin 0.2.0 targets dsh `0.2.1-rc.2` on both hosts.
+> **Compatibility.** Plugin 0.2.1 targets dsh `0.2.1-rc.2` on both hosts.
 > The unified sidebar uses that release's workspace and layout services.
 > Desktop uses its built-in browser bridge without modifying `app.asar`. See
 > [Porting to another DSH version](#porting-to-another-dsh-version).
 
 ## Features
 
-- **Unified workspace sidebar** — local and SSH folders share one list, with
-  host labels, connection status, folding, search, new chats, pinning, renaming
-  and archiving. The main pane keeps the selected host's conversation and file preview.
+- **Native workspace sidebar** — local and SSH folders share DSH's own list,
+  menus, search and dialogs. Remote folders add only a server name and connection
+  dot. Add Workspace offers Local / Remote.
 - **Cross-host session references** — Copy Session ID produces a link with
-  `hostId`. Paste it into either host's composer to include recent conversation
-  text from the other host. Clipboard writes run in the Desktop parent document.
+  `hostId`. The model can read the linked conversation on demand with the
+  paginated `read_session` tool. Clipboard writes run in the Desktop parent document.
 - **Host management** — discovers concrete `Host` aliases from your OpenSSH
   user config (recursively expanding `Include`), and accepts manually saved
   `user@host` entries with an optional port. Saved hosts live in your dsh home
@@ -86,7 +86,7 @@ dsh plugin --profile web add github:feng-spinning/dsh-remote-modern
 
 # From a packed tarball
 npm pack
-dsh plugin --profile web add file:/absolute/path/to/dsh-remote-modern-0.2.0.tgz
+dsh plugin --profile web add file:/absolute/path/to/dsh-remote-modern-0.2.1.tgz
 
 # From a source checkout you intend to edit (symlinked)
 dsh plugin --profile web add link:/absolute/path/to/dsh-remote-modern
@@ -98,8 +98,8 @@ Then restart the backend and reopen the GUI:
 dsh web
 ```
 
-A **远程连接 / Remote connection** entry appears in the sidebar and as a
-settings section. The package declares no `prepare` script, so git-hosted
+A **远程连接 / Remote connection** settings section manages hosts; Add Workspace
+also offers Remote and host management. The package declares no `prepare` script, so git-hosted
 installs need no `allowBuilds` approval — `lib/` is committed and CI verifies
 it matches a fresh build.
 
@@ -111,7 +111,7 @@ launch the reserved `desktop` profile.
 
 Desktop 0.2.1 embeds the selected SSH host using its built-in
 `dshDesktop.browser` lease and isolated webview. No `app.asar` patch is needed.
-Connect from **SSH 连接**, then expand a remote folder in the shared sidebar.
+Connect from **Add Workspace → Remote** or the connection settings, then expand a remote folder.
 Click a local session to switch back. The folder's **+** creates a chat on that
 host; the global New Chat button follows the visible host. Switching may reload
 the view: saved history persists, but unsent drafts and scroll positions are not
@@ -137,7 +137,7 @@ remote `0.2.1-rc.2`; future DSH releases still require compatibility validation.
 
 1. In a terminal, run `ssh <host>` once so the host key is known and key auth
    works.
-2. Open **远程连接 / Remote connection** from the sidebar or settings.
+2. Open **远程连接 / Remote connection** in settings, or **Add Workspace → Remote → Manage SSH hosts**.
 3. Add the host: either pick a discovered SSH config alias, or type
    `user@host` (and a port if it is not 22). Then run the read-only check.
 4. Connect. The first connection installs a private, exact-version dsh runtime
@@ -158,18 +158,25 @@ dsh://sessions/session-…?hostId=local
 dsh://sessions/session-…?hostId=ssh%3Adahua
 ```
 
-Paste a link into a local or remote prompt. Before submission the plugin reads
-the named host's history and appends it as reference data. The sidebar's **↗**
-button also opens a session by link. SSH aliases must already be configured;
-bare IDs do not guess a host.
+Paste a link and ask the model to read it. The original prompt is preserved;
+no conversation text or XML appendix is added. `read_session` retrieves text only
+when the model calls it. SSH aliases must already be configured; bare IDs do not
+guess a host.
 
-A prompt accepts up to four references. Each reads a recent 40-message history
-window and includes up to 24,000 characters of user/assistant text. Runtime
-context, skill catalogs, reasoning, tool output and attachments are excluded;
-partial excerpts have `truncated: true`. A failed read prevents submission.
-Referenced text becomes part of the destination conversation and its model
-context. Earlier expanded reference blocks are not recursively included.
-This supplies text context; it does not migrate tasks, files or processes.
+Each call returns at most 20 messages by default (configurable from 1 to 50),
+bounded to 24,000 characters. Pages run newest to oldest against a fixed event
+cursor, with chronological messages inside each page. Follow `nextCursor` until
+`hasMore` is false to read all user/assistant text, including split long messages.
+Runtime context, skill catalogs, reasoning, tool output and attachments are excluded.
+Results enter the destination model context as tool results. Old XML appendices
+are excluded from reads, but existing messages are not rewritten.
+
+The connector installs a small versioned reader companion on the remote host.
+Remote-to-local reads use a read-only mailbox over the existing authenticated SSH
+gateway; no reverse port or local credential is exposed. The mailbox authorizes
+only links pasted into that destination conversation through Desktop.
+`hostId=local` always identifies the originating Desktop, never the Linux host.
+Desktop and SSH must remain connected for these reads.
 
 ## How it works
 
@@ -273,8 +280,9 @@ not copied from the local machine. No shell configuration file is modified.
 Windows Desktop `0.2.1-rc.2` and a real Linux SSH host have been used to verify
 the shared sidebar, existing remote conversations, clipboard links and history
 reads in both directions. Both models correctly returned a random phrase stored
-only in the other host's disposable test conversation. The 24 automated tests
-cover routing, hot-update cleanup, history filtering, reference failures,
+only in the other host's disposable test conversation, using four and six actual
+tool pages respectively. Prompt text remained unchanged. The 26 automated tests
+cover native component/store reuse, routing, cleanup, history pagination, reference failures,
 combined bundle transforms and connector regressions.
 Separate Linux supervisor and upgrade tests remain available.
 See [HANDOFF.md](HANDOFF.md) for detailed verification evidence.

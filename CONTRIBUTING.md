@@ -60,9 +60,10 @@ It does not access the internet:
 
 | File | Covers |
 |---|---|
-| `test/client.test.js` | official store binding, global New Chat host routing, local prompt reference expansion and cleanup |
+| `test/client.test.js` | native component/store reuse without child redeclaration, global New Chat host routing, unchanged prompts and cleanup |
 | `test/federation.test.js` | host-qualified IDs, actual-user filtering, bounded history, unavailable hosts and combined UI bundles |
-| `test/remote-api.test.js` | authenticated HTTP/WebSocket RPC, stream cancellation and remote prompt expansion |
+| `test/remote-api.test.js` | authenticated HTTP/WebSocket RPC, stream cancellation and authorization without changing prompts |
+| `test/session-reader.test.js` | backwards pagination, long-message continuation, skipped runtime messages and session-scoped mailbox grants |
 | `test/bootstrap.test.js` | `reusableEndpoint`: only a live endpoint declaring the current version **and** data home is reused |
 | `test/gateway.test.js` | gateway authentication, Host/Origin enforcement, header and cookie rewriting, WebSocket upgrade, and that a detached gateway answers `503` without replaying a mutation |
 | `test/manager.test.js` | connect pooling, a stable gateway URL across reconnects, target validation before spawning, serialized host saves, disconnect cancelling an in-flight startup |
@@ -119,7 +120,10 @@ loopback dsh backend without involving SSH at all.
 | `src/gateway.js` | Per-host loopback HTTP/WebSocket gateway and browser authentication |
 | `src/tunnel.js` | SSH argument construction, read-only probe, dynamic SOCKS tunnel, bootstrap upload |
 | `src/remote-bootstrap.cjs` | Uploaded to the remote host; installs/reuses a dsh CLI and owns the backend supervisor |
-| `src/client.js` | Web client: sidebar launcher, settings page, full-screen overlay |
+| `src/client.js` | Client settings, connection management and remote main pane |
+| `src/native-sidebar.js` | Decorates native component seats; preserves child-slot declarations and store identity |
+| `src/session-reader.js` | Fixed-cursor pagination of user/assistant text |
+| `src/remote-reader.js`, `src/reader-broker.js` | Remote companion and authenticated Desktop read mailbox |
 | `src/upstream-*.ts` | Upstream Apache-2.0 sources retained verbatim (see `NOTICE`) |
 
 ## Style

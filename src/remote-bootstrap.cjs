@@ -5,8 +5,23 @@ const path = require('node:path');
 const os = require('node:os');
 const { spawn, spawnSync } = require('node:child_process');
 const { createHash } = require('node:crypto');
+const { pathToFileURL } = require('node:url');
 const VERSION = '0.2.1-rc.2';
 const root = process.env.DSH_REMOTE_MODERN_ROOT || path.join(os.homedir(), '.dsh-remote-modern');
+let readerInfo = {};
+if (typeof readerBundle !== 'undefined') {
+  const directory = path.join(root, 'reader', readerBundle.revision);
+  fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
+  for (const [name, original] of Object.entries(readerBundle.files)) {
+    // pnpm links directory installs through node_modules; Node may retain that
+    // symlink's former realpath after an update. Load the immutable source URL.
+    const source = name === 'cordis.patch.yml'
+      ? original.replace(/name: \.\/([^\n]+)/, (_match, relative) => 'name: ' + JSON.stringify(pathToFileURL(path.join(directory, relative)).href))
+      : original;
+    fs.writeFileSync(path.join(directory, name), source, { mode: 0o600 });
+  }
+  readerInfo = { readerPath: directory, readerRevision: readerBundle.revision };
+}
 const runtime = path.join(root, 'runtime', VERSION);
 // Backend lifecycle belongs to this connector; user data belongs to the
 // existing remote dsh installation, including credentials and conversations.
@@ -195,7 +210,7 @@ async function attach() {
     let ep = endpoint();
     if (reusableEndpoint(ep)) {
       // Readiness is also checked by the client through the forwarded HTTP carrier.
-      console.log('DSH_SSH_READY ' + JSON.stringify(ep)); return ep;
+      console.log('DSH_SSH_READY ' + JSON.stringify({ ...ep, ...readerInfo })); return ep;
     }
     // Never install a fallback while a live runtime is being overwritten.
     const live = ep && (alive(ep.pid) || alive(ep.childPid));
@@ -218,7 +233,7 @@ async function attach() {
     console.log('DSH_SSH_PROGRESS starting');
     for (let i = 0; i < 180; i++) {
       ep = endpoint();
-      if (ep?.pid === supervisor.pid && alive(ep.childPid)) { console.log('DSH_SSH_READY ' + JSON.stringify(ep)); return ep; }
+      if (ep?.pid === supervisor.pid && alive(ep.childPid)) { console.log('DSH_SSH_READY ' + JSON.stringify({ ...ep, ...readerInfo })); return ep; }
       if (!alive(supervisor.pid)) throw new Error('Remote backend failed to start; inspect ~/.dsh-remote-modern/backend.log');
       await delay(500);
     }

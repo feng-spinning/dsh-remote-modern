@@ -1,7 +1,9 @@
-import { parseSessionReference, referenceExcerpt, expandSessionReferences } from './session-reference.js';
+import { parseSessionReference, referenceExcerpt } from './session-reference.js';
+import { readSessionPage } from './session-reader.js';
 
 const allowedActions = new Set(['workspace/create', 'workspace/rename', 'workspace/pinSession', 'workspace/unpinSession',
-  'workspace/archiveSession', 'workspace/unarchiveSession', 'directoryPicker/list', 'session/rename']);
+  'workspace/archiveSession', 'workspace/unarchiveSession', 'workspace/delete', 'workspace/insertBefore',
+  'directoryPicker/list', 'session/rename', 'session/fork', 'session/search']);
 
 export class Federation {
   constructor(manager, local) { this.manager = manager; this.local = local; this.catalogs = new Map(); }
@@ -35,6 +37,7 @@ export class Federation {
           sessionId: session.sessionId, title: session.projections?.values?.title || '新会话',
           updatedAt: session.updatedAt, blank: session.blank, parentSessionId: session.parentSessionId,
           running: session.running, cwd: session.cwd, formatStatus: session.formatStatus,
+          origin: session.origin,
         })), hostId: `ssh:${host.target}`, id: host.id, label: host.label };
         this.catalogs.set(id, { value, time: Date.now(), revision: this.manager.status(host.id).revision });
         return value;
@@ -64,5 +67,9 @@ export class Federation {
     if (snapshot.type !== 'snapshot') throw new Error('会话历史格式不兼容');
     return { ...ref, label, ...referenceExcerpt(snapshot) };
   }
-  expand(content) { return expandSessionReferences(content, ref => this.read(ref)); }
+  async readPage(input, signal) {
+    const ref = parseSessionReference(input.reference);
+    const transport = ref.hostId === 'local' ? this.local : (await this.gateway(ref.hostId, true)).gateway;
+    return readSessionPage(input, transport, signal);
+  }
 }

@@ -53,7 +53,24 @@ export async function unusedPort() {
   await new Promise(resolve => server.close(resolve)); return port;
 }
 export async function bootstrapCommand() {
-  const source = await readFile(new URL('./remote-bootstrap.cjs', import.meta.url));
+  const { createHash } = await import('node:crypto');
+  const files = {};
+  for (const name of ['remote-reader.js', 'reader-tool.js', 'session-reader.js', 'session-reference.js']) {
+    files[name] = await readFile(new URL('./' + name, import.meta.url), 'utf8');
+  }
+  const revision = createHash('sha256').update('0.2.1:content-named-modules').update(JSON.stringify(files)).digest('hex');
+  files['remote-reader.js'] = files['remote-reader.js'].replace("'development'", JSON.stringify(revision));
+  // Profile reconciliation reloads changed entry URLs. Give the companion and
+  // its dependencies content-qualified names so an upgrade cannot reuse the
+  // previous Node module graph under the same installed package directory.
+  const packaged = Object.fromEntries(Object.entries(files).map(([name, source]) => [
+    `${revision}-${name}`, source.replace(/from '\.\/([^']+)'/g, (_match, dependency) => `from './${revision}-${dependency}'`),
+  ]));
+  packaged['package.json'] = JSON.stringify({ name: 'dsh-remote-session-reader', version: '0.2.1', type: 'module',
+    main: `./${revision}-remote-reader.js`, engines: { dsh: '0.2.1-rc.2' },
+    dsh: { manifestVersion: 1, bundle: { patch: './cordis.patch.yml' } } });
+  packaged['cordis.patch.yml'] = `- insert:\n    - id: ssh-session-reader\n      name: ./${revision}-remote-reader.js\n      inject: [connection, tools, sessionController]\n`;
+  const source = Buffer.from(`const readerBundle = ${JSON.stringify({ revision, files: packaged })};\n` + await readFile(new URL('./remote-bootstrap.cjs', import.meta.url), 'utf8'));
   const hash = (await import('node:crypto')).createHash('sha256').update(source).digest('hex');
   const shell = `set -eu; umask 077; ${runtimePrelude}command -v node >/dev/null || { echo 'Remote Node.js >=24 is required' >&2; exit 127; }; mkdir -p "$HOME/.dsh-remote-modern/bootstrap"; IFS= read -r payload; printf '%s' "$payload" | base64 -d > "$HOME/.dsh-remote-modern/bootstrap/${hash}.cjs"; exec node "$HOME/.dsh-remote-modern/bootstrap/${hash}.cjs" --watch`;
   return { command: "sh -c '" + shell.replaceAll("'", "'\\''") + "'", payload: source.toString('base64') + '\n' };

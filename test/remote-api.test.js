@@ -46,7 +46,7 @@ test('authenticated remote API reads cancel streams, correlate replies and fail 
   gateway.detach();assert.throws(()=>gateway.call('session/list',{}),/断开/);
 });
 
-test('remote prompt expansion forwards exactly once and refuses unresolved references without sending the prompt',async t=>{
+test('remote prompt grants reader access once, preserves visible text and fails closed when granting fails',async t=>{
   const prompts=[];
   const server=createServer(async(req,res)=>{
     if(req.url.startsWith('/?token=')){res.writeHead(303,{'set-cookie':'auth=fixture'});res.end();return;}
@@ -55,9 +55,8 @@ test('remote prompt expansion forwards exactly once and refuses unresolved refer
     res.writeHead(200,{'content-type':'application/json'});res.end(JSON.stringify({type:'server-response',rpcId:message.rpcId,result:{ok:true,value:{accepted:true}}}));
   });
   await new Promise(r=>server.listen(0,'127.0.0.1',r));const port=server.address().port;
-  const gateway=await new Gateway({expand:async content=>{
-    if(content[0].text==='missing')throw Error('referenced host offline');
-    return [...content,{type:'text',text:'resolved remote history'}];
+  const gateway=await new Gateway({preparePrompt:async request=>{
+    if(request.content[0].text==='missing')throw Error('reader bridge offline');
   }}).start();
   t.after(async()=>{await gateway.close();server.closeAllConnections();await new Promise(r=>server.close(r));});
   await gateway.attach({port,endpoint:{port,token:'fixture'}});
@@ -67,7 +66,7 @@ test('remote prompt expansion forwards exactly once and refuses unresolved refer
   })})).json()).result;
   assert.equal((await send('read local')).ok,true);
   assert.equal(prompts.length,1);assert.equal(prompts[0].payload.args.request.requestId,'stable-id');
-  assert.equal(prompts[0].payload.args.request.content[1].text,'resolved remote history');
+  assert.deepEqual(prompts[0].payload.args.request.content,[{type:'text',text:'read local'}]);
   const rejected=await send('missing');assert.equal(rejected.ok,false);assert.match(rejected.error.message,/offline/);
   assert.equal(prompts.length,1);
 });

@@ -76,13 +76,6 @@ function HostsPage() {
     h('p', { style: { fontSize: 12, opacity: 0.6, lineHeight: 1.7 } }, '首次连接会在远端 ~/.dsh-remote-modern 创建独立运行目录，优先复用已有 dsh 0.2.1-rc.2，否则安装该版本。远端需要 Node.js 24+；安装时需要 npm 和网络。请先在终端完成 SSH 密钥及主机指纹确认。模型账户需在远端设置，本机凭据不会自动复制。'),
     model.error && h('p', { role: 'alert', style: { color: '#bd553a', overflowWrap: 'anywhere' } }, model.error));
 }
-function Launcher({ owner }) {
-  const model = useModel();
-  const active = model.hosts.find(h => h.id === model.active?.id);
-  return h('div', { style: { display: 'flex', alignItems: 'center', width: '100%' } },
-    h('button', { title: '远程连接', 'aria-label': '远程连接', style: { ...button, flex: 1, textAlign: 'left', border: 0, padding: '7px 8px', fontSize: 12, whiteSpace: 'nowrap' }, onClick: () => emit({ picker: true }) }, h(Dot, { state: active?.state }), 'SSH 连接'),
-    h('button', { title: '打开会话链接', 'aria-label': '打开会话链接', style: { ...button, border: 0, padding: '7px 8px', fontSize: 12 }, onClick: () => emit({ referenceInput: '' }) }, '↗'));
-}
 function DesktopGuestRemote({ active, epoch, bridge }) {
   const container = useRef(null);
   useEffect(() => {
@@ -125,10 +118,6 @@ function RemoteMain() {
   useEffect(() => { setFrameEpoch(x => x + 1); }, [model.active?.id, model.active?.revision]);
   if (!model.active) return h('div', { style: { padding: 30 } }, '从左侧栏选择 SSH 工作区或会话');
   return h('div', { style: { ...panel, width: '100%', height: '100%', minHeight: 0, minWidth: 0, background: 'var(--dsw-alias-bg-base, #fafafa)', display: 'flex', flexDirection: 'column' } },
-      h('div', { style: { height: 36, padding: '0 12px', display: 'flex', alignItems: 'center', gap: 10, borderBottom: '1px solid #9992', flexShrink: 0, fontSize: 12 } },
-        h('button', { style: button, onClick: () => emit({ picker: true }) }, h(Dot, { state: activeHost?.state }), model.active.label, ' ▾'),
-        h('span', { role: 'status', style: { fontSize: 12, opacity: 0.65, flex: 1 } }, phaseText[activeHost?.phase] || stateText[activeHost?.state] || '连接中', ' · SSH 远端'),
-        h('button', { style: { ...button, border: 0, padding: 4 }, onClick: () => setFrameEpoch(x => x + 1) }, '刷新')),
       model.error && h('div', { role: 'alert', style: { padding: 10, color: '#bd553a' } }, model.error),
       guestBridge && model.active.ready ? h(DesktopGuestRemote, { active: model.active, epoch: frameEpoch, bridge: guestBridge })
       : native && model.active.ready ? h(NativeRemote, { active: model.active, visible: model.remoteVisible && !model.picker, epoch: frameEpoch })
@@ -157,11 +146,10 @@ function Overlay() {
 function apply(ctx) {
   call = async (endpoint, payload = {}) => {
     const result = await ctx.connection.rpc.call('/api', 'sshRemote/' + endpoint, payload);
-    if (!result.ok) throw new Error(result.error.message);
+    if (!result.ok) throw Object.assign(new Error(result.error.message), { rpcError: result.error });
     return result.value;
   };
   installUnifiedClient(ctx, writeClipboard);
-  ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({ name: 'sidebar.footer.action', id: 'ssh-remote-modern', order: 5 }, Launcher));
   ctx.slots.inject('settings.section', () => ctx.slots.register({ name: 'settings.section', id: 'ssh-remote-modern', order: 16, label: '远程连接' }, HostsPage));
   ctx.slots.inject('shell.overlay', () => ctx.slots.register({ name: 'shell.overlay', id: 'ssh-remote-modern', order: 1 }, Overlay));
   ctx.slots.inject('main', () => ctx.slots.register({ name: 'main', key: 'ssh-remote-modern' }, RemoteMain));

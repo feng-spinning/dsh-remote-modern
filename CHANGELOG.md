@@ -8,6 +8,18 @@ All notable changes to this plugin are documented here. The format follows
 code is unchanged from the `0.1.2` build; only packaging, manifests and
 documentation were adapted for redistribution.
 
+## 0.2.1 — 2026-10-20
+
+- Keep DSH's native workspace component, store, menus and dialogs; add only
+  server names and connection dots to remote folders. Add Workspace offers Local / Remote.
+- Replace automatic XML history appendices with on-demand, paginated `read_session`
+  calls. Preserve submitted prompt content and support full user/assistant text traversal.
+- Add a remote reader companion and a session-scoped mailbox over the existing
+  authenticated gateway for remote-to-Desktop reads.
+- Handle links directly followed by Chinese punctuation; content-qualify the
+  companion's entry and imports so profile reloads load the new module version.
+- Verify real model calls in both directions and preserve source-history messages.
+
 ## 0.2.0 — 2026-10-20
 
 - Show local and SSH folders and sessions in one sidebar with host labels,

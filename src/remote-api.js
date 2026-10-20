@@ -24,7 +24,7 @@ export function remoteCall(upstream, cookie, endpoint, args, signal = AbortSigna
           if (res.statusCode !== 200) throw new Error(`远端 API 返回 HTTP ${res.statusCode}`);
           const reply = JSON.parse(Buffer.concat(chunks));
           if (reply.rpcId !== rpcId || reply.type !== 'server-response') throw new Error('远端 RPC 响应不匹配');
-          if (!reply.result?.ok) throw new Error(reply.result?.error?.message || '远端 API 调用失败');
+          if (!reply.result?.ok) throw Object.assign(new Error(reply.result?.error?.message || '远端 API 调用失败'), { rpcError: reply.result?.error });
           resolve(reply.result.value);
         } catch (error) { reject(error); }
       });

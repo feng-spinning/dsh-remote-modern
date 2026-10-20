@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import { discoverSshConfigHosts } from '../lib/ssh-config.js';
 import { Gateway } from './gateway.js';
 import { openTunnel, validateTarget, probeHost } from './tunnel.js';
+import { ReaderBroker } from './reader-broker.js';
 
 export class RemoteManager {
   constructor({ home = process.env.DSH_HOME || join(homedir(), '.dsh'), connector = openTunnel, discover = discoverSshConfigHosts, sshExecutable } = {}) {
@@ -48,7 +49,7 @@ export class RemoteManager {
     if (!host) throw new Error('未找到主机');
     let entry = this.connections.get(id);
     if (!entry) {
-      entry = { host, gateway: await new Gateway({ expand: content => this.expand ? this.expand(content) : content }).start(), state: 'connecting', phase: 'ssh', attempt: 0, stopped: false };
+      entry = { host, gateway: await new Gateway().start(), state: 'connecting', phase: 'ssh', attempt: 0, stopped: false };
       // Recheck after asynchronous gateway allocation so simultaneous connect calls
       // converge on one owner instead of leaking a second SSH process.
       const existing = this.connections.get(id);
@@ -77,6 +78,7 @@ export class RemoteManager {
           onProgress: phase => { entry.phase = phase; },
           onClose: () => {
             if (entry.stopped) return;
+            entry.reader?.close();
             entry.gateway.detach(); entry.tunnel?.close(); entry.tunnel = undefined;
             entry.state = 'reconnecting'; entry.phase = 'ssh';
             this.#retry(entry);
@@ -85,8 +87,14 @@ export class RemoteManager {
         if (entry.stopped) { tunnel.close(); return; }
         await entry.gateway.attach(tunnel);
         if (entry.stopped) { tunnel.close(); entry.gateway.detach(); return; }
+        if (this.read && tunnel.endpoint.readerPath) {
+          entry.reader = new ReaderBroker(entry.gateway, 'ssh:' + entry.host.target, this.read);
+          await entry.reader.start(tunnel.endpoint);
+          entry.gateway.preparePrompt = request => entry.reader.authorize(request);
+        }
         entry.tunnel = tunnel; entry.state = 'connected'; entry.phase = ''; entry.error = ''; entry.attempt = 0; entry.connectedAt = new Date().toISOString(); entry.revision = (entry.revision || 0) + 1;
       } catch (e) {
+        entry.reader?.close();
         tunnel?.close(); entry.gateway.detach(); entry.error = e.message;
         entry.state = entry.stopped ? 'disconnected' : 'reconnecting';
         if (!entry.stopped) this.#retry(entry);
@@ -101,7 +109,7 @@ export class RemoteManager {
   }
   async disconnect(id) {
     const entry = this.connections.get(id); if (!entry) return;
-    entry.stopped = true; clearTimeout(entry.timer); entry.controller?.abort(); entry.tunnel?.close(); entry.gateway.detach();
+    entry.stopped = true; clearTimeout(entry.timer); entry.reader?.close(); entry.controller?.abort(); entry.tunnel?.close(); entry.gateway.detach();
     await entry.gateway.close(); this.connections.delete(id);
     // Closing the local transport never stops the persistent remote backend.
   }

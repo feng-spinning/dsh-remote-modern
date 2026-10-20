@@ -16,8 +16,8 @@ export class Gateway {
   #remoteCookie = '';
   #upstream;
   #sockets = new Set();
-  constructor({ expand } = {}) {
-    this.expand = expand;
+  constructor({ preparePrompt } = {}) {
+    this.preparePrompt = preparePrompt;
     this.navigation = { revision: 0 };
     this.server = createServer((req, res) => {
       void this.#handle(req, res).catch(error => {
@@ -85,7 +85,7 @@ export class Gateway {
     }
     const upstream = this.#upstream;
     let body;
-    if (this.expand && req.method === 'POST' && url.pathname === '/api/session/prompt') {
+    if (this.preparePrompt && req.method === 'POST' && url.pathname === '/api/session/prompt') {
       const chunks = []; let size = 0;
       for await (const chunk of req) {
         size += chunk.length;
@@ -96,7 +96,7 @@ export class Gateway {
       try {
         const prompt = message.payload?.args?.request;
         if (message.type !== 'client-request' || message.method !== 'session/prompt' || !prompt) throw new Error('无效的消息请求');
-        prompt.content = await this.expand(prompt.content);
+        await this.preparePrompt(prompt);
       } catch (error) {
         res.writeHead(200, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ type: 'server-response', rpcId: message.rpcId, result: {

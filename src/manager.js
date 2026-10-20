@@ -48,7 +48,7 @@ export class RemoteManager {
     if (!host) throw new Error('未找到主机');
     let entry = this.connections.get(id);
     if (!entry) {
-      entry = { host, gateway: await new Gateway().start(), state: 'connecting', phase: 'ssh', attempt: 0, stopped: false };
+      entry = { host, gateway: await new Gateway({ expand: content => this.expand ? this.expand(content) : content }).start(), state: 'connecting', phase: 'ssh', attempt: 0, stopped: false };
       // Recheck after asynchronous gateway allocation so simultaneous connect calls
       // converge on one owner instead of leaking a second SSH process.
       const existing = this.connections.get(id);

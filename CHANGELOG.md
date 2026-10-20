@@ -8,6 +8,20 @@ All notable changes to this plugin are documented here. The format follows
 code is unchanged from the `0.1.2` build; only packaging, manifests and
 documentation were adapted for redistribution.
 
+## 0.2.0 — 2026-10-20
+
+- Show local and SSH folders and sessions in one sidebar with host labels,
+  folding, search and session actions; open remote content in the main pane.
+- Copy host-qualified `dsh://sessions/…?hostId=…` links from the Desktop parent.
+  Read explicit session references in either direction before prompt submission.
+- Bound excerpts, exclude injected runtime/skill messages and prevent submission
+  when a referenced session cannot be read.
+- Route global New Chat to the visible host and use Cordis effects to restore
+  method overrides, timers and SSH managers on plugin unload or hot update.
+- Target DSH `0.2.1-rc.2`; add the `ws` dependency and locked CI installation.
+- Switching main views may recreate the remote document; unsent drafts and
+  scroll positions are not guaranteed across views.
+
 ## 0.1.6 — 2026-10-17
 
 - Monitor the remote runtime while connected; after a stable installation change,

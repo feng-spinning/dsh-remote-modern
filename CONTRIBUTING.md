@@ -16,18 +16,18 @@ Repository: <https://github.com/feng-spinning/dsh-remote-modern>
    links resolve.
 5. Optionally publish to npm with `npm publish`. The `files` field limits the
    tarball to `src/`, `lib/`, `assets/`, the bundle patch, both READMEs and the
-   licence files — 18 files, about 39 kB, no dependencies.
+   licence files. The runtime dependency `ws` is installed by the package manager.
 
 The CI badge and the `repository`, `homepage` and `bugs` fields in
 `package.json` point at the repository above; update them if the project moves.
 
 ## Development setup
 
-Requirements: **Node.js 24 or newer** and OpenSSH on `PATH`. There are no
-third-party runtime dependencies and no install step — `npm install` only
-creates a lockfile for a dependency-free package.
+Requirements: **Node.js 24 or newer** and OpenSSH on `PATH`.
+Install the locked dependencies before building or testing.
 
 ```sh
+npm ci
 npm run build   # regenerate lib/ from src/
 npm test        # unit tests (node:test)
 npm run check   # build + test, what CI runs
@@ -55,11 +55,14 @@ npm test                        # test/*.test.js
 node test/supervisor.integration.js   # optional, needs a real dsh CLI
 ```
 
-`npm test` runs five files with Node's built-in test runner and no network
-access:
+`npm test` uses Node's built-in test runner and local loopback servers.
+It does not access the internet:
 
 | File | Covers |
 |---|---|
+| `test/client.test.js` | official store binding, global New Chat host routing, local prompt reference expansion and cleanup |
+| `test/federation.test.js` | host-qualified IDs, actual-user filtering, bounded history, unavailable hosts and combined UI bundles |
+| `test/remote-api.test.js` | authenticated HTTP/WebSocket RPC, stream cancellation and remote prompt expansion |
 | `test/bootstrap.test.js` | `reusableEndpoint`: only a live endpoint declaring the current version **and** data home is reused |
 | `test/gateway.test.js` | gateway authentication, Host/Origin enforcement, header and cookie rewriting, WebSocket upgrade, and that a detached gateway answers `503` without replaying a mutation |
 | `test/manager.test.js` | connect pooling, a stable gateway URL across reconnects, target validation before spawning, serialized host saves, disconnect cancelling an in-flight startup |

@@ -3,16 +3,18 @@
 [![CI](https://github.com/feng-spinning/dsh-remote-modern/actions/workflows/ci.yml/badge.svg)](https://github.com/feng-spinning/dsh-remote-modern/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D24-brightgreen.svg)](package.json)
-[![DSH](https://img.shields.io/badge/dsh-0.2.0--rc.2-blueviolet.svg)](package.json)
+[![DSH](https://img.shields.io/badge/dsh-0.2.1--rc.2-blueviolet.svg)](package.json)
 
 [English](README.md) | 中文
 
 为 **DeepSeek Harness** 提供的 SSH 远端后端插件。它把 Web 和 Desktop 客户端连接到运行在远端主机上的持久 dsh 后端，因此 GUI 操作的就是远端机器的工作区、会话、文件和终端。侧栏一键即可在本地与远端之间切换。
 
-> **兼容性。** 本机插件接受 dsh `0.2.0-rc.2`、`0.2.1-rc.1` 和 `0.2.1-rc.2`。Desktop 0.2.1 使用应用内置的原生浏览器接口；旧版 0.2.0 内嵌需要配套的 `dshSSHRemote` 壳扩展。远端连接器只安装并校验 dsh `0.2.1-rc.2`，遇到其他版本的 endpoint 会拒绝复用。参见[移植到其他 DSH 版本](#移植到其他-dsh-版本)。
+> **兼容性。** 0.2.0 插件针对本机及远端 dsh `0.2.1-rc.2`。统一侧栏使用此版本的工作区服务和布局接口；Desktop 使用应用内置的原生浏览器接口，无需修改 `app.asar`。参见[移植到其他 DSH 版本](#移植到其他-dsh-版本)。
 
 ## 功能
 
+- **统一工作区侧栏** —— 本地和 SSH 目录出现在同一列表，远端带主机名及连接状态。支持折叠、搜索、目录内新会话、置顶、重命名和归档；右侧保留所选主机的原生对话与文件预览。
+- **跨主机会话引用** —— 「复制 Session ID」生成带 `hostId` 的链接；在任一主机的输入框粘贴链接即可读取另一台主机的近期对话文本。复制在 Desktop 顶层完成，避开隔离远端页面的剪贴板限制。
 - **主机管理** —— 从 OpenSSH 用户配置中发现具体的 `Host` 别名（递归展开 `Include`），也支持手动保存 `user@host` 和可选端口。已保存主机以 `0600` 权限、原子写入的 JSON 存放在本机 dsh home 目录。
 - **只读主机检测** —— 报告操作系统、架构、Node.js、npm、`base64` 情况以及远端是否已有连接器后端，全程不在远端创建或修改任何文件。
 - **远端后端持久存活** —— 远端 dsh 进程由独立于 SSH 会话的 supervisor 持有。客户端断开不会停止它，重连会接回同一个进程。
@@ -20,13 +22,13 @@
 - **每主机独立 loopback 网关** —— 每个主机在 `127.0.0.1` 上拥有自己的网关，使用独立的随机 cookie 名与密钥。网关完成远端浏览器认证并改写 authority、origin 与 cookie，使远端页面可以像本地页面一样被嵌入。
 - **复用远端既有配置** —— 远端后端使用主机已有的 `DSH_HOME`（默认 `~/.dsh`），因此凭据、工作区和历史会话就是远端原本那一份。
 - **无本机降级执行** —— 隧道断开时网关返回 `503`，请求绝不会转到本机执行，也不会自动重放写操作。
-- **同时服务 Desktop 与 Web** —— Web 用覆盖层 iframe 嵌入远端页面，Desktop 使用受沙箱约束的原生视图渲染。
+- **同时服务 Desktop 与 Web** —— Web 在主内容区用 iframe 嵌入远端页面，Desktop 使用受沙箱约束的原生视图渲染。
 
 ## 环境要求
 
 本机：
 
-- **DeepSeek Harness `0.2.0-rc.2`、`0.2.1-rc.1` 或 `0.2.1-rc.2`**（Web 或 Desktop）。
+- **DeepSeek Harness `0.2.1-rc.2`**（Web 或 Desktop）。
 - **Node.js 24 或更高**，且 `PATH` 中有 **pnpm**（`dsh plugin` 需要）。
 - `PATH` 中有 **OpenSSH**。Windows 下优先使用 `%SystemRoot%\System32\OpenSSH\ssh.exe`。
 
@@ -36,7 +38,7 @@
 - **Node.js 24 或更高**、**npm**、**base64**。
 - SSH 密钥认证已可用。插件以 `BatchMode=yes` 和 `StrictHostKeyChecking=yes` 运行 `ssh`，因此不会提示输入密码，也不会跳过主机指纹校验。请先在终端执行一次 `ssh <主机>` 完成指纹确认。
 
-包内没有第三方运行依赖。
+运行依赖 `ws` 用于读取官方 WebSocket 历史流；安装时由包管理器处理。
 
 ## 安装
 
@@ -51,7 +53,7 @@ dsh plugin --profile web add github:feng-spinning/dsh-remote-modern
 
 # 从打包好的 tarball 安装
 npm pack
-dsh plugin --profile web add file:/绝对路径/dsh-remote-modern-0.1.6.tgz
+dsh plugin --profile web add file:/绝对路径/dsh-remote-modern-0.2.0.tgz
 
 # 从准备修改的源码目录安装（软链接）
 dsh plugin --profile web add link:/绝对路径/dsh-remote-modern
@@ -69,7 +71,7 @@ dsh web
 
 使用 Desktop 自身的插件管理器安装生成的 tarball。若返回“需要重启”，退出并重新打开 Desktop 后生效；普通 Web CLI 不负责启动 `desktop` profile。
 
-在 0.2.1 Desktop 中，点击「远程连接」→ 主机的「连接」，远端工作区显示在应用内。顶部「返回本地」隐藏远端页面，重新打开同一主机保留页面位置；「刷新视图」重建页面，「断开」释放页面及本机隧道。实现使用官方 `dshDesktop.browser` 租约和隔离分区，无需修改或替换 `app.asar`。没有该接口的旧版客户端继续使用配套壳扩展；两者均不存在时提供外部浏览器入口。
+点击「SSH 连接」→ 主机的「连接」，远端目录会加入左侧工作区列表。展开目录后点击会话即可打开；点击本地会话即可切回。目录旁的「+」在对应主机建会话，顶部「新会话」跟随当前可见主机。远端内容使用官方 `dshDesktop.browser` 租约和隔离分区；切换主机可能重新加载视图，已保存历史保留，暂未承诺未发送草稿及滚动位置的跨视图保留。
 
 ## 使用
 
@@ -81,8 +83,21 @@ dsh web
 2. 从侧栏或设置页打开**远程连接**。
 3. 添加主机：选择发现到的 SSH config 别名，或直接填写 `user@host`（非 22 端口请一并填写端口）。然后执行一次只读检测。
 4. 点击连接。首次连接时，若远端没有匹配的 CLI，会在远端安装私有且版本精确的 dsh 运行时，随后启动后端。进度依次显示为*正在安装 → 正在启动 → 正在建立 SSH 隧道*。
-5. 此时 GUI 中的工作区、会话、文件和终端均来自远端。点击**返回本地**切回。
+5. 远端目录加入统一侧栏，点击远端会话后右侧文件和终端来自该远端。点击任一本地会话即可切回。
 6. **断开**只会关闭本机 SSH 进程和网关，远端后端继续运行，因此重连很快。
+
+### 双向引用会话
+
+在统一侧栏会话的「···」菜单中选择「复制 Session ID」：
+
+```text
+dsh://sessions/session-…?hostId=local
+dsh://sessions/session-…?hostId=ssh%3Adahua
+```
+
+将链接粘贴到本地或远端聊天输入框并发送，插件在发送前读取对应主机历史，附加为引用资料。侧栏底部「↗」也可按链接打开会话。SSH 别名必须已配置；裸 ID 不会猜测主机。
+
+每条消息最多 4 个引用，每个引用读取最近 40 条历史消息窗口，保留最多 24,000 字符。仅包含用户正文和助手文本，排除环境提示、技能目录、推理、工具输出及附件；裁剪时标记 `truncated`。读取失败会阻止本次发送。引用的文本会进入目标会话及其模型上下文；历史中的引用资料不会递归展开。此功能提供文本上下文，不迁移任务、文件或运行进程。
 
 ## 工作原理
 
@@ -143,12 +158,12 @@ SOCKS 转发                  建立在单个 ssh 进程的动态转发之上
 - **没有远端停止按钮。** 按设计，断开只作用于本机；停止后端需要在远端根据 `endpoint.json` 记录的 PID 自行确认进程身份后处理。
 - **不是纯前端扩展。** 插件依赖本机 dsh 后端运行，且该后端必须仅监听 loopback。
 - **没有服务化持久。** 远端 supervisor 是用户进程，不承诺机器重启后自动恢复。
-- **不等价于完整的 Codex Remote SSH。** 没有跨主机任务迁移、没有统一的多主机会话侧栏、没有按主机的系统服务管理。
-- **Desktop 属于原生壳适配。** 远端页面在 Desktop 构建中以原生方式嵌入；官方应用更新可能覆盖该适配。
+- **不迁移任务。** 统一侧栏与文本引用不包括跨主机任务迁移或系统服务管理。
+- **布局适配随版本验证。** 网关只对指定远端 UI 模块隐藏重复侧栏并添加导航；官方接口或 bundle 结构改变时需更新插件。
 
 ### 验证状态
 
-连接器链路已在运行 dsh `0.2.0-rc.2` 的真实 Linux SSH 主机上验证：只读检测、后端启动并复用主机既有数据目录与凭据、远端工作区列表，以及通过网关打开既有会话正文。supervisor 存活、数据目录复用、并发 attach 与网关关闭后的行为由 [`test/supervisor.integration.js`](test/supervisor.integration.js) 针对本机真实 dsh 后端覆盖。macOS/Windows 远端、跨主机迁移，以及版本变更后的自动重新部署仍未验证。
+在 Windows Desktop `0.2.1-rc.2` 与真实 Linux SSH 主机验证统一侧栏、远端既有会话、剪贴板链接及双方历史读取。两条专用会话互引，双方模型均正确读出另一主机的随机口令。24 项自动测试覆盖主机路由、热更新清理、历史筛选、引用失败、组合 bundle 转换及原连接器回归。supervisor 和升级重启的独立 Linux 测试仍保留；详情见 [HANDOFF.md](HANDOFF.md)。
 
 ## 移植到其他 DSH 版本
 
@@ -159,6 +174,7 @@ SOCKS 转发                  建立在单个 ssh 进程的动态转发之上
 | `src/remote-bootstrap.cjs` | `const VERSION = '0.2.1-rc.2'`（远端后端） |
 | `src/tunnel.js` | `endpoint.version !== '0.2.1-rc.2'` 兼容性检查（远端后端） |
 | `package.json` | `engines.dsh`（本机客户端支持范围），以及 `description` 中提到的版本 |
+| `src/guest-integration.js`、`src/unified-client.js` | 布局模块结构、工作区/会话服务、消息提交接口 |
 | `test/helpers.js` | 模拟 endpoint 的 `version` |
 | `test/manager.test.js` | 对 `bootstrapCommand()` 内嵌版本的断言 |
 | `test/supervisor.integration.js` | `runtime/<版本>/node_modules` 路径 |
@@ -166,8 +182,9 @@ SOCKS 转发                  建立在单个 ssh 进程的动态转发之上
 ## 开发
 
 ```sh
+npm ci          # 安装锁定依赖
 npm run build   # 由 src/ 重新生成 lib/
-npm test        # 单元测试，不需要网络
+npm test        # 单元测试，需要本机 loopback，不访问互联网
 npm run check   # build + test，与 CI 一致
 ```
 

@@ -1,5 +1,21 @@
 # 经验记录
 
+## Cordis 的卸载不是名为 dispose 的普通事件
+
+- 事实：连续热安装候选版后，本地引用发送退回草稿；明确输出错误为 `cannot get required service "connection" in inactive context`。当前 Cordis 的卸载运行 effect 的 disposer，没有发出普通 `dispose` 事件。
+- 原因：原实现用 `ctx.on('dispose', ...)` 清理；旧 RPC 包装器、定时器及 manager 未释放。服务方法读取还会生成绑定上下文的 Proxy，不能用每次读取的方法身份比较或把绑定旧 context 的方法恢复回去。
+- 修正：使用 `ctx.effect` 返回清理函数，以原始 property descriptor 安装和恢复方法。真实 Desktop 完整重启清除旧候选残留，双向口令验收通过；修复版再次热更新后发送仍成功，引用只展开一次。回归使用每次返回新绑定方法的服务 Proxy，禁止注册无效 dispose 事件。
+
+## user/message 事件不等于用户正文
+
+- 事实：DSH 也把 agent-instructions、runtime-context、skill-catalog、time-context 持久化为 `user/message`。仅按 event.type 取文本会让技能目录占满引用字符预算，挤掉实际问题。
+- 修正：用户消息要求 `data.source.kind === 'user'`；助手只取 text part，排除推理和工具输出。历史中的插件引用块不再次加入引用。基于真实事件形状补充回归，并以双方随机口令验证结果。
+
+## 组合 bundle 与响应成功仍需实际组件验证
+
+- 事实：官方把多个客户端模块合在一条 `plugins/??…` 请求中；组合包约 9 MB。初次使用未绑定的 store 方法导致组件不显示，服务/API 验证没有暴露此问题。
+- 修正：按模块 id 限定转换边界；为组合包保留明确大小限制。store subscribe/getSnapshot 用闭包调用保留 this。自动测试加上依赖 this 的模型，真实 Desktop 同时检查侧栏、主内容区和复制结果。
+
 ## 原位升级不能用存活 PID 证明运行时一致
 
 - 问题：复用全局 CLI 启动持久后端后，`npm install -g` 覆盖磁盘文件，旧 Node 进程仍运行；动态提供的前端资源变为新版，而内存里的模块清单仍是旧版。

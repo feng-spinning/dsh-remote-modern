@@ -1,5 +1,19 @@
 # 交接记录
 
+## 2026-10-20：统一 SSH 工作区与跨主机会话引用
+
+- 用户授权在本仓库直接开发、安装本机 DSH Desktop 验证后 git push。交付版本 0.2.0，基于 main 0.1.6；仅连接既有 dahua。
+- 已实现 0.2.0：本地/SSH 统一侧栏、远端 main 插槽、目录折叠和搜索、会话置顶/重命名/归档、按主机新会话、顶层剪贴板复制、带 hostId 的链接打开、双向历史文本引用。
+- 自动验证：构建及 24 项回归通过，覆盖真实 store 的 this 绑定、Cordis 方法 Proxy 与卸载、HTTP/WS RPC、失败不发送、消息来源过滤、引用上限、组合 bundle 转换以及原连接器测试。
+- 真实 Desktop 0.2.1-rc.2 + dahua：本地目录和远端 tpu/holograms 同栏；远端旧会话及文件卡片可见；实际剪贴板读到 `dsh://sessions/…?hostId=ssh%3Adahua`。真实组合 bundle 转换成功。
+- 双向端到端：两个专用会话互引，远端模型正确回复本地随机口令，本地模型正确回复远端随机口令。初始本地 Tsinghua 模型返回 AUTH；仅测试会话切到已配置 DeepSeek 账号模型后通过，未改账号凭据。
+- 重要修复：真实测试发现 DSH 注入提示也属于 user/message，已按 source 过滤；热更新原有 dispose 事件失效导致旧 context 残留，已改为 effect disposer，并完整退出重启 Desktop 清除旧候选实例。已知失败及依据见 LESSONS。
+- 已安装最终 `final/dsh-remote-modern-0.2.0.tgz`，插件管理器返回 applied。从修复版再次热更新后真实发送成功，回复 HOT-UPDATE-OK；引用块恰好 1 个，测试没有调用工具。全局新会话在 SSH 下保持 dahua/tpu；两个专用验收会话已归档。源码、构建产物和本文档随本节对应 git 提交交付。
+- 最终安装包 SHA256：`ebe1e8e055c23aa0ac8a9e156384847f2d15dbcd23313e4b45e98f634a21bfd8`。
+- 本机辅助脚本和证据位于仓库外 `../../output/dsh-unified-20261020/`。`e2e-state.json` 记录专用测试 ID，`e2e-transcript.json` 和 `e2e-audit.json` 记录通过的口令、单次展开及热更新证据；脚本凭据仅在内存使用，不进入 git。重启后本机后端 authority 为 `127.0.0.1:60804`，以后需重新发现。
+- 边界：引用最近 40 条消息窗口、最多 24,000 字符/会话、4 会话/提示；仅用户/助手文本，不包含工具结果/附件。只针对 DSH rc.2；不迁移运行任务。切换视图可能重载 guest，草稿/滚动位置保留暂不保证。未新增长时间断网和多远端并行压力测试；原 Linux supervisor/upgrade 测试本次未重复执行（相关代码未改）。
+- 决策依据见 [implementation-notes.md](implementation-notes.md)。
+
 ## 2026-10-17：0.1.6 自动升级重启与重连（已完成）
 
 - 按用户要求将过期后端处理改为自动化：连接期间每 5 秒检查安装身份，连续两次不匹配后主动关闭本机 SSH carrier，进入重连；离线后重新连接也执行同样检查。

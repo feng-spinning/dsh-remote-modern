@@ -1,5 +1,7 @@
 import { createServer, request as httpRequest } from 'node:http';
 import { randomBytes, timingSafeEqual } from 'node:crypto';
+import { remoteCall, remoteFirst } from './remote-api.js';
+import { integrateGuestBundle } from './guest-integration.js';
 
 const constantEqual = (a, b) => {
   if (typeof a !== 'string') return false;
@@ -14,8 +16,14 @@ export class Gateway {
   #remoteCookie = '';
   #upstream;
   #sockets = new Set();
-  constructor() {
-    this.server = createServer((req, res) => this.#handle(req, res));
+  constructor({ expand } = {}) {
+    this.expand = expand;
+    this.navigation = { revision: 0 };
+    this.server = createServer((req, res) => {
+      void this.#handle(req, res).catch(error => {
+        if (!res.headersSent) { res.writeHead(502); res.end(error.message); } else res.destroy();
+      });
+    });
     this.server.on('connection', socket => { this.#sockets.add(socket); socket.once('close', () => this.#sockets.delete(socket)); });
     this.server.on('upgrade', (req, socket, head) => this.#upgrade(req, socket, head));
   }
@@ -25,6 +33,20 @@ export class Gateway {
     return this;
   }
   entryUrl() { return `${this.origin}/?sshAuth=${this.#secret}`; }
+  navigate(target) {
+    for (const value of [target.sessionId, target.workspaceId]) {
+      if (value !== undefined && (typeof value !== 'string' || !/^[a-zA-Z0-9_-]{1,128}$/.test(value))) throw new Error('无效的工作区或会话 ID');
+    }
+    this.navigation = { revision: this.navigation.revision + 1, sessionId: target.sessionId, workspaceId: target.workspaceId };
+  }
+  call(endpoint, args, signal) {
+    if (!this.#upstream) throw new Error('SSH 已断开');
+    return remoteCall(this.#upstream, this.#remoteCookie, endpoint, args, signal);
+  }
+  first(endpoint, args, signal) {
+    if (!this.#upstream) throw new Error('SSH 已断开');
+    return remoteFirst(this.#upstream, this.#remoteCookie, endpoint, args, signal);
+  }
   async attach(tunnel) {
     const upstream = { port: tunnel.port, authority: `127.0.0.1:${tunnel.endpoint.port}` };
     const cookies = await new Promise((resolve, reject) => {
@@ -50,24 +72,69 @@ export class Gateway {
     if (!upgrade) for (const key of HOP_HEADERS) delete headers[key];
     return headers;
   }
-  #handle(req, res) {
+  async #handle(req, res) {
     const url = new URL(req.url, this.origin);
     if (req.method === 'GET' && url.pathname === '/' && constantEqual(url.searchParams.get('sshAuth'), this.#secret) && this.#trusted(req)) {
       res.writeHead(302, { location: '/', 'set-cookie': `${this.#cookieName}=${this.#secret}; Path=/; HttpOnly; SameSite=Strict`, 'cache-control': 'no-store', 'referrer-policy': 'no-referrer' }); res.end(); return;
     }
     if (!this.#authorized(req)) { res.writeHead(403); res.end('SSH gateway authentication required'); return; }
     if (!this.#upstream) { res.writeHead(503, { 'retry-after': '2' }); res.end('SSH disconnected; reconnecting. No local execution fallback.'); return; }
+    if (url.pathname === '/_dsh/navigation' && req.method === 'GET') {
+      res.writeHead(200, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+      res.end(JSON.stringify(this.navigation)); return;
+    }
     const upstream = this.#upstream;
-    const proxy = httpRequest({ host: '127.0.0.1', port: upstream.port, path: req.url, method: req.method, headers: this.#headers(req) }, remote => {
+    let body;
+    if (this.expand && req.method === 'POST' && url.pathname === '/api/session/prompt') {
+      const chunks = []; let size = 0;
+      for await (const chunk of req) {
+        size += chunk.length;
+        if (size > 16 * 1024 * 1024) throw new Error('消息过大');
+        chunks.push(chunk);
+      }
+      const message = JSON.parse(Buffer.concat(chunks));
+      try {
+        const prompt = message.payload?.args?.request;
+        if (message.type !== 'client-request' || message.method !== 'session/prompt' || !prompt) throw new Error('无效的消息请求');
+        prompt.content = await this.expand(prompt.content);
+      } catch (error) {
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({ type: 'server-response', rpcId: message.rpcId, result: {
+          ok: false, error: { code: 'ssh-remote/reference', message: error.message, details: {} },
+        } })); return;
+      }
+      // A prompt prepared during a reconnect must not be sent to a replacement.
+      if (upstream !== this.#upstream) throw new Error('SSH 连接已变化，请重新发送');
+      body = Buffer.from(JSON.stringify(message));
+    }
+    const requestHeaders = this.#headers(req);
+    const bundlePath = decodeURIComponent(url.pathname + url.search);
+    const kinds = ['workspace', 'layout'].filter(kind => bundlePath.includes(`@deepseek-ai/dsh-client-ui-${kind}/client.js`) && !bundlePath.includes('client.js.map'));
+    if (kinds.length) { delete requestHeaders['if-none-match']; delete requestHeaders['if-modified-since']; requestHeaders['accept-encoding'] = 'identity'; }
+    if (body) requestHeaders['content-length'] = body.length;
+    const proxy = httpRequest({ host: '127.0.0.1', port: upstream.port, path: req.url, method: req.method, headers: requestHeaders }, remote => {
       const headers = { ...remote.headers, 'referrer-policy': 'no-referrer' };
       delete headers['set-cookie'];
       for (const key of HOP_HEADERS) delete headers[key];
       if (headers.location?.startsWith('http://' + upstream.authority)) headers.location = headers.location.replace('http://' + upstream.authority, this.origin);
-      res.writeHead(remote.statusCode, headers); remote.pipe(res);
+      remote.on('error', () => res.destroy());
+      if (kinds.length && remote.statusCode === 200) {
+        const chunks = []; let size = 0;
+        remote.on('data', chunk => { size += chunk.length; if (size > 32 * 1024 * 1024) remote.destroy(new Error('UI bundle too large')); else chunks.push(chunk); });
+        remote.on('end', () => {
+          try {
+            let transformed = Buffer.concat(chunks).toString();
+            for (const kind of kinds) transformed = integrateGuestBundle(transformed, kind);
+            delete headers['content-length']; delete headers.etag; delete headers['content-encoding'];
+            headers['cache-control'] = 'no-store';
+            res.writeHead(200, headers); res.end(transformed);
+          } catch (error) { res.writeHead(502); res.end(error.message); }
+        });
+      } else { res.writeHead(remote.statusCode, headers); remote.pipe(res); }
     });
     proxy.on('error', () => { if (!res.headersSent) { res.writeHead(502); res.end('SSH upstream unavailable'); } else res.destroy(); });
     req.on('aborted', () => proxy.destroy()); res.on('close', () => { if (!res.writableFinished) proxy.destroy(); });
-    req.pipe(proxy);
+    if (body) proxy.end(body); else req.pipe(proxy);
   }
   #upgrade(req, socket, head) {
     // The browser can reset an upgraded socket before the upstream handshake

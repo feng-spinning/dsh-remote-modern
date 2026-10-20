@@ -3,7 +3,7 @@
 [![CI](https://github.com/feng-spinning/dsh-remote-modern/actions/workflows/ci.yml/badge.svg)](https://github.com/feng-spinning/dsh-remote-modern/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D24-brightgreen.svg)](package.json)
-[![DSH](https://img.shields.io/badge/dsh-0.2.0--rc.2-blueviolet.svg)](package.json)
+[![DSH](https://img.shields.io/badge/dsh-0.2.1--rc.2-blueviolet.svg)](package.json)
 
 English | [中文](README.zh.md)
 
@@ -12,16 +12,19 @@ Desktop clients to a persistent dsh backend running on a remote host, so the
 remote machine's workspace, sessions, files and terminal are what the GUI
 operates on. Switching between local and remote is one click in the sidebar.
 
-> **Compatibility.** The local plugin accepts dsh `0.2.0-rc.2`,
-> `0.2.1-rc.1` and `0.2.1-rc.2`. Desktop 0.2.1 uses its built-in native
-> browser bridge; embedding on 0.2.0 requires the companion `dshSSHRemote`
-> shell extension. The remote connector still installs and verifies dsh
-> `0.2.1-rc.2` on the remote host, and refuses an endpoint that reports
-> anything else. See
+> **Compatibility.** Plugin 0.2.0 targets dsh `0.2.1-rc.2` on both hosts.
+> The unified sidebar uses that release's workspace and layout services.
+> Desktop uses its built-in browser bridge without modifying `app.asar`. See
 > [Porting to another DSH version](#porting-to-another-dsh-version).
 
 ## Features
 
+- **Unified workspace sidebar** — local and SSH folders share one list, with
+  host labels, connection status, folding, search, new chats, pinning, renaming
+  and archiving. The main pane keeps the selected host's conversation and file preview.
+- **Cross-host session references** — Copy Session ID produces a link with
+  `hostId`. Paste it into either host's composer to include recent conversation
+  text from the other host. Clipboard writes run in the Desktop parent document.
 - **Host management** — discovers concrete `Host` aliases from your OpenSSH
   user config (recursively expanding `Include`), and accepts manually saved
   `user@host` entries with an optional port. Saved hosts live in your dsh home
@@ -45,13 +48,13 @@ operates on. Switching between local and remote is one click in the sidebar.
 - **No local fallback** — while the tunnel is down the gateway answers `503`.
   Requests are never executed locally and mutations are never replayed.
 - **Desktop and Web** — the same plugin serves both. Web embeds the remote page
-  in an overlay iframe; Desktop renders it in a sandboxed native view.
+  in the main pane's iframe; Desktop renders it in a sandboxed native view.
 
 ## Requirements
 
 Local machine:
 
-- **DeepSeek Harness `0.2.0-rc.2`, `0.2.1-rc.1` or `0.2.1-rc.2`** (Web or Desktop).
+- **DeepSeek Harness `0.2.1-rc.2`** (Web or Desktop).
 - **Node.js 24 or newer** with **pnpm** available on `PATH` — required by
   `dsh plugin`.
 - **OpenSSH** on `PATH`. On Windows the plugin prefers
@@ -66,7 +69,7 @@ Remote host:
   password and never bypasses host-key verification. Run `ssh <host>` once in a
   terminal first to accept the host key.
 
-There are no third-party runtime dependencies.
+The `ws` runtime dependency reads official WebSocket history streams.
 
 ## Install
 
@@ -83,7 +86,7 @@ dsh plugin --profile web add github:feng-spinning/dsh-remote-modern
 
 # From a packed tarball
 npm pack
-dsh plugin --profile web add file:/absolute/path/to/dsh-remote-modern-0.1.6.tgz
+dsh plugin --profile web add file:/absolute/path/to/dsh-remote-modern-0.2.0.tgz
 
 # From a source checkout you intend to edit (symlinked)
 dsh plugin --profile web add link:/absolute/path/to/dsh-remote-modern
@@ -108,10 +111,11 @@ launch the reserved `desktop` profile.
 
 Desktop 0.2.1 embeds the selected SSH host using its built-in
 `dshDesktop.browser` lease and isolated webview. No `app.asar` patch is needed.
-Returning to local hides the remote page; reopening the same host preserves its
-position. Refresh recreates the view, and disconnect releases it and the local
-tunnel. Older clients use the companion `dshSSHRemote` bridge when available,
-otherwise an external-browser link remains available.
+Connect from **SSH 连接**, then expand a remote folder in the shared sidebar.
+Click a local session to switch back. The folder's **+** creates a chat on that
+host; the global New Chat button follows the visible host. Switching may reload
+the view: saved history persists, but unsent drafts and scroll positions are not
+guaranteed across views.
 
 While connected, the plugin checks the remote installation every five seconds.
 After two changed samples it reconnects, waits for a stable installation, and
@@ -140,10 +144,32 @@ remote `0.2.1-rc.2`; future DSH releases still require compatibility validation.
    on the remote host if a matching CLI is not already available, then starts
    the backend. Progress is shown as *installing → starting → establishing SSH
    tunnel*.
-5. The remote workspace, sessions, files and terminal are now in the GUI. Use
-   **返回本地 / Back to local** to switch back.
+5. Remote folders appear in the shared sidebar. Selecting a remote chat routes
+   its files and terminal to that host. Select any local chat to return.
 6. **断开 / Disconnect** closes the local SSH process and gateway. The remote
    backend keeps running, so reconnecting is fast.
+
+### Referencing sessions in either direction
+
+Choose **复制 Session ID** in a sidebar session's **···** menu:
+
+```text
+dsh://sessions/session-…?hostId=local
+dsh://sessions/session-…?hostId=ssh%3Adahua
+```
+
+Paste a link into a local or remote prompt. Before submission the plugin reads
+the named host's history and appends it as reference data. The sidebar's **↗**
+button also opens a session by link. SSH aliases must already be configured;
+bare IDs do not guess a host.
+
+A prompt accepts up to four references. Each reads a recent 40-message history
+window and includes up to 24,000 characters of user/assistant text. Runtime
+context, skill catalogs, reasoning, tool output and attachments are excluded;
+partial excerpts have `truncated: true`. A failed read prevents submission.
+Referenced text becomes part of the destination conversation and its model
+context. Earlier expanded reference blocks are not recursively included.
+This supplies text context; it does not migrate tasks, files or processes.
 
 ## How it works
 
@@ -236,23 +262,22 @@ not copied from the local machine. No shell configuration file is modified.
   running, and that backend must stay bound to loopback.
 - **No service persistence.** The remote supervisor is a user process with no
   promise of restarting after a machine reboot.
-- **Not a full Codex Remote SSH equivalent.** There is no cross-host task
-  migration, no unified multi-host session sidebar, and no per-host system
-  service management.
-- **Desktop is a native shell adaptation.** The remote page is embedded
-  natively in the Desktop build; an official application update may overwrite
-  that adaptation.
+- **No task migration.** The unified sidebar and text references do not move
+  tasks or manage per-host system services.
+- **Version-specific layout integration.** The gateway adapts selected remote
+  UI modules to hide the duplicated sidebar and add navigation. Changes to
+  official services or bundle structure require compatibility verification.
 
 ### Verification status
 
-The connector path has been exercised against a real Linux SSH host running dsh
-`0.2.0-rc.2`: read-only detection, backend startup reusing the host's existing
-data home and credentials, remote workspace listing, and loading an existing
-conversation through the gateway. The supervisor, data-home reuse, concurrent
-attach and gateway-close behaviour are covered by
-[`test/supervisor.integration.js`](test/supervisor.integration.js) against a
-real local dsh backend. macOS/Windows remotes, cross-host migration and
-automatic redeployment after a version change remain unverified.
+Windows Desktop `0.2.1-rc.2` and a real Linux SSH host have been used to verify
+the shared sidebar, existing remote conversations, clipboard links and history
+reads in both directions. Both models correctly returned a random phrase stored
+only in the other host's disposable test conversation. The 24 automated tests
+cover routing, hot-update cleanup, history filtering, reference failures,
+combined bundle transforms and connector regressions.
+Separate Linux supervisor and upgrade tests remain available.
+See [HANDOFF.md](HANDOFF.md) for detailed verification evidence.
 
 ## Porting to another DSH version
 
@@ -264,6 +289,7 @@ update all of them and re-run `npm run check`:
 | `src/remote-bootstrap.cjs` | `const VERSION = '0.2.1-rc.2'` (remote backend) |
 | `src/tunnel.js` | the `endpoint.version !== '0.2.1-rc.2'` compatibility check (remote backend) |
 | `package.json` | `engines.dsh` (local client support), and the `description` if it names a version |
+| `src/guest-integration.js`, `src/unified-client.js` | Layout bundle structure, workspace/session services and prompt API |
 | `test/helpers.js` | the fake endpoint `version` |
 | `test/manager.test.js` | the `bootstrapCommand()` assertion on the embedded version |
 | `test/supervisor.integration.js` | the `runtime/<version>/node_modules` path |
@@ -271,8 +297,9 @@ update all of them and re-run `npm run check`:
 ## Development
 
 ```sh
+npm ci          # install locked dependencies
 npm run build   # regenerate lib/ from src/
-npm test        # unit tests, no network
+npm test        # local loopback required; no internet access
 npm run check   # build + test, what CI runs
 ```
 

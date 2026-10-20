@@ -1,4 +1,5 @@
 import { RemoteManager } from './manager.js';
+import { Federation } from './federation.js';
 export const name = 'ssh-remote-modern';
 export const inject = ['connection'];
 export async function apply(ctx) {
@@ -7,6 +8,18 @@ export async function apply(ctx) {
 }
 export async function install(ctx, manager) {
   await manager.init();
+  const federation = new Federation(manager, {
+    async first(endpoint, args) {
+      const controller = new AbortController();
+      const session = ctx.get('sessionController');
+      if (!session) throw new Error('本机会话服务尚未就绪');
+      try {
+        for await (const value of session.follow(args.request, controller.signal)) return value;
+        throw new Error('本机会话没有返回历史');
+      } finally { controller.abort(); }
+    },
+  });
+  manager.expand = content => federation.expand(content);
   const dispatch = async (endpoint, payload) => {
     try {
       let value;
@@ -16,12 +29,20 @@ export async function install(ctx, manager) {
         case 'connect': value = await manager.connect(payload?.id); break;
         case 'probe': value = await manager.probe(payload?.id); break;
         case 'disconnect': await manager.disconnect(payload?.id); value = null; break;
+        case 'catalog': value = await federation.catalog(payload?.id); break;
+        case 'action': value = await federation.action(payload); break;
+        case 'readReference': value = await federation.read(payload); break;
+        case 'expandReferences': value = await federation.expand(payload?.content); break;
+        case 'navigate': {
+          const { gateway } = await federation.gateway(payload?.id);
+          gateway.navigate(payload); value = null; break;
+        }
         default: throw new Error('未知的 SSH 操作');
       }
       return { ok: true, value };
     } catch (e) { return { ok: false, error: { code: 'ssh-remote', message: e.message, details: {} } }; }
   };
-  for (const endpoint of ['list', 'save', 'probe', 'connect', 'disconnect']) {
+  for (const endpoint of ['list', 'save', 'probe', 'connect', 'disconnect', 'catalog', 'action', 'readReference', 'expandReferences', 'navigate']) {
     ctx.effect(() => ctx.connection.fetch.register({
       path: '/api/sshRemote/' + endpoint, methods: ['POST'], requestBody: 'buffered',
       async fetch(request) {
@@ -33,5 +54,5 @@ export async function install(ctx, manager) {
       },
     }), 'ssh-remote-modern: ' + endpoint);
   }
-  ctx.on('dispose', () => manager.close());
+  ctx.effect(() => () => manager.close());
 }

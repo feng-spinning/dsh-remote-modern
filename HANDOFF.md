@@ -1,5 +1,18 @@
 # 交接记录
 
+## 2026-10-26：0.2.2 适配本机 DSH rc.3（已本机安装并验证）
+
+- 用户要求随本机 DeepSeek Harness `0.2.1-rc.3` 升级插件，重新本机安装后 push GitHub。基线 `fd7b9b3`，本次插件版本 `0.2.2`。
+- 本机安装包版本已只读核对为 `0.2.1-rc.3`。旧插件 0.2.1 的 `engines.dsh` 仅允许 rc.2，rc.3 插件管理列表虽显示安装，但 rows 为空，插件 API 为 404。0.2.2 将本机范围改为 `0.2.1-rc.2 || 0.2.1-rc.3`；本机重装返回 applied，rows 恢复 `ssh-remote-modern`。
+- 核对当前实际安装的工作区/布局/分页历史/工具注册/Desktop 浏览器接口。rc.3 改动了新会话内部的空白复用和草稿选项，插件使用的 public 方法仍兼容；执行原版 `openWorkspace` 验证参数传递，组合 bundle 适配仍通过。无需改写原生 UI 或分页实现。
+- dahua 继续复用既有 rc.2 后端及原读取配套组件，不因本机升级而升级远端运行时。真实连接已成功，工作区含 fd_bpm、tpu、holograms，目录接口返回 41 项，配套 revision 仍为 `f73f333abfc9e75d711a71eb98021bb4c3bbc68cedb229e3bcda7dc81ed42fc3`。
+- `npm run check` 构建及 26 项测试全部通过，运行代码及构建产物无需修改。rc.3 本机真实调用 `read_session` 4 页读完远端，远端调用 6 页读完本机，两端读回正确随机口令、末页 `hasMore=false`、用户原文完全不变。页数取自工具事件记录，不依赖模型最终自述。
+- 专用验收会话 `session-f0cbc7e7-642b-48fc-ad6f-4906dc9129b4`（本地）和 `session-0491cca1-4114-42fc-a73f-00626b99eda2`（dahua）已归档。没有在途验收任务；未使用 Computer Use，本次没有重新验证 GUI 点击与视觉布局，保留前次用户验收及此次实际接口/原版模块检查作为证据边界。
+- 最终包 `../../output/dsh-rc3-20261026/release/dsh-remote-modern-0.2.2.tgz` 已通过本机 rc.3 官方插件管理接口安装，结果 `application=applied`、version 0.2.2。SHA256：`47954ccd8979870a9bc743f01a9a0c1c7968569745def13f56239a82c965decc`。29 个打包文件与本机实际安装逐文件哈希一致，版本/锁文件一致，差异格式检查通过；最终热安装后再次连接及两端分页读取通过。
+- 交付范围为本节对应的 Git 提交：兼容声明、锁文件和验证文档；运行源码及构建产物无变化。用户已授权推送 GitHub main；没有剩余实施事项，不发布 npm 或创建额外 release/tag。
+- 证据/脚本在 `../../output/dsh-rc3-20261026/`：`runtime-contract-audit.json`、`validation-summary.json`、`install-verification.json`、`post-install-check.json`、`audit-runtime.mjs`、`transport.mjs`、`connection.mjs`、`e2e.mjs`、`e2e-state.json`。本机 API 当前 `127.0.0.1:52389`，重启须重新发现；凭据仅在辅助脚本内存中使用，不提交。
+- 实现依据见 [implementation-notes.md](implementation-notes.md)。
+
 ## 2026-10-20：0.2.1 按需读取与原生侧栏（已安装并完成验收）
 
 - 当前授权：用户已自行完成实际验收，确认两端通过 `read_session` 互读且响应迅速，添加工作区流程完整；明确要求不再使用 Computer Use，最后检查后 **git push**。版本为 **0.2.1**，基于 `724842bdceea07b0a7cdc8114c47829c7b6d1975`；本节对应提交包含最终代码、构建产物和记录。

@@ -3,7 +3,7 @@
 [![CI](https://github.com/feng-spinning/dsh-remote-modern/actions/workflows/ci.yml/badge.svg)](https://github.com/feng-spinning/dsh-remote-modern/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D24-brightgreen.svg)](package.json)
-[![DSH](https://img.shields.io/badge/dsh-0.2.1--rc.2-blueviolet.svg)](package.json)
+[![DSH](https://img.shields.io/badge/dsh-0.2.1--rc.2%20%7C%20rc.3-blueviolet.svg)](package.json)
 
 English | [中文](README.zh.md)
 
@@ -12,8 +12,10 @@ Desktop clients to a persistent dsh backend running on a remote host, so the
 remote machine's workspace, sessions, files and terminal are what the GUI
 operates on. Switching between local and remote is one click in the sidebar.
 
-> **Compatibility.** Plugin 0.2.1 targets dsh `0.2.1-rc.2` on both hosts.
-> The unified sidebar uses that release's workspace and layout services.
+> **Compatibility.** Plugin 0.2.2 supports local dsh `0.2.1-rc.2` and `0.2.1-rc.3`.
+> The managed remote backend remains `0.2.1-rc.2`; a local Desktop upgrade
+> does not require upgrading the remote installation. The unified sidebar
+> uses the installed client's native workspace and layout services.
 > Desktop uses its built-in browser bridge without modifying `app.asar`. See
 > [Porting to another DSH version](#porting-to-another-dsh-version).
 
@@ -54,7 +56,7 @@ operates on. Switching between local and remote is one click in the sidebar.
 
 Local machine:
 
-- **DeepSeek Harness `0.2.1-rc.2`** (Web or Desktop).
+- **DeepSeek Harness `0.2.1-rc.2` or `0.2.1-rc.3`** (Web or Desktop).
 - **Node.js 24 or newer** with **pnpm** available on `PATH` — required by
   `dsh plugin`.
 - **OpenSSH** on `PATH`. On Windows the plugin prefers
@@ -86,7 +88,7 @@ dsh plugin --profile web add github:feng-spinning/dsh-remote-modern
 
 # From a packed tarball
 npm pack
-dsh plugin --profile web add file:/absolute/path/to/dsh-remote-modern-0.2.1.tgz
+dsh plugin --profile web add file:/absolute/path/to/dsh-remote-modern-0.2.2.tgz
 
 # From a source checkout you intend to edit (symlinked)
 dsh plugin --profile web add link:/absolute/path/to/dsh-remote-modern
@@ -285,19 +287,26 @@ tool pages respectively. Prompt text remained unchanged. The 26 automated tests
 cover native component/store reuse, routing, cleanup, history pagination, reference failures,
 combined bundle transforms and connector regressions.
 Separate Linux supervisor and upgrade tests remain available.
+Plugin 0.2.2 also passed all 26 tests and real model reads between local Desktop
+`0.2.1-rc.3` and the existing rc.2 remote backend (four and six tool pages,
+unchanged prompts). The installed rc.3 workspace/navigation, layout transforms,
+history, tool registration and Desktop lease contracts were checked directly;
+this compatibility update did not repeat GUI automation.
 See [HANDOFF.md](HANDOFF.md) for detailed verification evidence.
 
 ## Porting to another DSH version
 
-The target version is pinned in a few places. For a different dsh release,
-update all of them and re-run `npm run check`:
+Local and remote compatibility are independent. For a local-client upgrade,
+audit its workspace, slot, history and Desktop bridge contracts, then update
+`engines.dsh` in `package.json` and `package-lock.json` and run `npm run check`.
+Changing the managed remote version additionally requires the remote entries below:
 
 | File | What to change |
 |---|---|
 | `src/remote-bootstrap.cjs` | `const VERSION = '0.2.1-rc.2'` (remote backend) |
 | `src/tunnel.js` | the `endpoint.version !== '0.2.1-rc.2'` compatibility check (remote backend) |
 | `package.json` | `engines.dsh` (local client support), and the `description` if it names a version |
-| `src/guest-integration.js`, `src/unified-client.js` | Layout bundle structure, workspace/session services and prompt API |
+| `src/guest-integration.js`, `src/unified-client.js`, `src/native-sidebar.js` | Layout bundle structure, native workspace/slot services and prompt API |
 | `test/helpers.js` | the fake endpoint `version` |
 | `test/manager.test.js` | the `bootstrapCommand()` assertion on the embedded version |
 | `test/supervisor.integration.js` | the `runtime/<version>/node_modules` path |

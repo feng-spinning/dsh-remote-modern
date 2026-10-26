@@ -3,13 +3,13 @@
 [![CI](https://github.com/feng-spinning/dsh-remote-modern/actions/workflows/ci.yml/badge.svg)](https://github.com/feng-spinning/dsh-remote-modern/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D24-brightgreen.svg)](package.json)
-[![DSH](https://img.shields.io/badge/dsh-0.2.1--rc.2-blueviolet.svg)](package.json)
+[![DSH](https://img.shields.io/badge/dsh-0.2.1--rc.2%20%7C%20rc.3-blueviolet.svg)](package.json)
 
 [English](README.md) | 中文
 
 为 **DeepSeek Harness** 提供的 SSH 远端后端插件。它把 Web 和 Desktop 客户端连接到运行在远端主机上的持久 dsh 后端，因此 GUI 操作的就是远端机器的工作区、会话、文件和终端。侧栏一键即可在本地与远端之间切换。
 
-> **兼容性。** 0.2.1 插件针对本机及远端 dsh `0.2.1-rc.2`。统一侧栏使用此版本的工作区服务和布局接口；Desktop 使用应用内置的原生浏览器接口，无需修改 `app.asar`。参见[移植到其他 DSH 版本](#移植到其他-dsh-版本)。
+> **兼容性。** 插件 0.2.2 支持本机 dsh `0.2.1-rc.2` 和 `0.2.1-rc.3`；托管的远端后端仍为 `0.2.1-rc.2`，本机 Desktop 升级不要求升级远端安装。统一侧栏复用当前客户端的原生工作区服务和布局接口；Desktop 使用内置浏览器接口，无需修改 `app.asar`。参见[移植到其他 DSH 版本](#移植到其他-dsh-版本)。
 
 ## 功能
 
@@ -28,7 +28,7 @@
 
 本机：
 
-- **DeepSeek Harness `0.2.1-rc.2`**（Web 或 Desktop）。
+- **DeepSeek Harness `0.2.1-rc.2` 或 `0.2.1-rc.3`**（Web 或 Desktop）。
 - **Node.js 24 或更高**，且 `PATH` 中有 **pnpm**（`dsh plugin` 需要）。
 - `PATH` 中有 **OpenSSH**。Windows 下优先使用 `%SystemRoot%\System32\OpenSSH\ssh.exe`。
 
@@ -53,7 +53,7 @@ dsh plugin --profile web add github:feng-spinning/dsh-remote-modern
 
 # 从打包好的 tarball 安装
 npm pack
-dsh plugin --profile web add file:/绝对路径/dsh-remote-modern-0.2.1.tgz
+dsh plugin --profile web add file:/绝对路径/dsh-remote-modern-0.2.2.tgz
 
 # 从准备修改的源码目录安装（软链接）
 dsh plugin --profile web add link:/绝对路径/dsh-remote-modern
@@ -167,16 +167,18 @@ SOCKS 转发                  建立在单个 ssh 进程的动态转发之上
 
 在 Windows Desktop `0.2.1-rc.2` 与真实 Linux SSH 主机验证侧栏和双方历史读取。两个专用会话的真实模型分别调用 4 页、6 页读取工具，正确读出另一主机的随机口令，用户正文保持不变。26 项自动测试覆盖原生组件/store 复用、主机路由、卸载清理、历史分页、引用失败、组合 bundle 转换及原连接器回归。supervisor 和升级重启的独立 Linux 测试仍保留；完整 UI 验收状态见 [HANDOFF.md](HANDOFF.md)。
 
+0.2.2 在本机 Desktop `0.2.1-rc.3` 与既有 rc.2 远端后端之间再次完成双向真实模型读取（4 页、6 页，正文不变），26 项测试全部通过。直接核对了实际安装版的工作区导航、布局转换、历史、工具注册和 Desktop 租约接口；本次兼容升级没有重复 GUI 自动化。
+
 ## 移植到其他 DSH 版本
 
-目标版本固定写在以下几处。若要适配其他 dsh 版本，请全部修改后重新执行 `npm run check`：
+本机和远端兼容范围分别维护。只升级本机客户端时，先核对原生工作区、插槽、历史及 Desktop 浏览器接口，再修改 `package.json` 和 `package-lock.json` 的 `engines.dsh` 并执行 `npm run check`。若还要升级托管的远端版本，再同步下表中的远端项：
 
 | 文件 | 需要修改的内容 |
 |---|---|
 | `src/remote-bootstrap.cjs` | `const VERSION = '0.2.1-rc.2'`（远端后端） |
 | `src/tunnel.js` | `endpoint.version !== '0.2.1-rc.2'` 兼容性检查（远端后端） |
 | `package.json` | `engines.dsh`（本机客户端支持范围），以及 `description` 中提到的版本 |
-| `src/guest-integration.js`、`src/unified-client.js` | 布局模块结构、工作区/会话服务、消息提交接口 |
+| `src/guest-integration.js`、`src/unified-client.js`、`src/native-sidebar.js` | 布局模块结构、原生工作区/插槽服务、消息提交接口 |
 | `test/helpers.js` | 模拟 endpoint 的 `version` |
 | `test/manager.test.js` | 对 `bootstrapCommand()` 内嵌版本的断言 |
 | `test/supervisor.integration.js` | `runtime/<版本>/node_modules` 路径 |

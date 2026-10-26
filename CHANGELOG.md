@@ -8,6 +8,14 @@ All notable changes to this plugin are documented here. The format follows
 code is unchanged from the `0.1.2` build; only packaging, manifests and
 documentation were adapted for redistribution.
 
+## 0.2.2 — 2026-10-26
+
+- Accept local DeepSeek Harness `0.2.1-rc.3` while retaining `0.2.1-rc.2` support.
+- Verify the installed rc.3 native workspace, layout, history and Desktop browser
+  contracts; retain the existing native UI and on-demand `read_session` behavior.
+- Keep the managed remote backend on rc.2 and document local-client and remote
+  compatibility separately.
+
 ## 0.2.1 — 2026-10-20
 
 - Keep DSH's native workspace component, store, menus and dialogs; add only

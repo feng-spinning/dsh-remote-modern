@@ -3,7 +3,7 @@
 [![CI](https://github.com/feng-spinning/dsh-remote-modern/actions/workflows/ci.yml/badge.svg)](https://github.com/feng-spinning/dsh-remote-modern/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 [![Node](https://img.shields.io/badge/node-%3E%3D24-brightgreen.svg)](package.json)
-[![DSH](https://img.shields.io/badge/dsh-0.2.1--rc.2%20%7C%20rc.3-blueviolet.svg)](package.json)
+[![DSH](https://img.shields.io/badge/dsh-0.2.1--rc.2%20%7C%20rc.3%20%7C%200.2.2--rc.1-blueviolet.svg)](package.json)
 
 English | [中文](README.zh.md)
 
@@ -12,7 +12,7 @@ Desktop clients to a persistent dsh backend running on a remote host, so the
 remote machine's workspace, sessions, files and terminal are what the GUI
 operates on. Switching between local and remote is one click in the sidebar.
 
-> **Compatibility.** Plugin 0.2.2 supports local dsh `0.2.1-rc.2` and `0.2.1-rc.3`.
+> **Compatibility.** Plugin 0.2.3 supports local dsh `0.2.1-rc.2`, `0.2.1-rc.3`, and `0.2.2-rc.1`.
 > The managed remote backend remains `0.2.1-rc.2`; a local Desktop upgrade
 > does not require upgrading the remote installation. The unified sidebar
 > uses the installed client's native workspace and layout services.
@@ -56,7 +56,7 @@ operates on. Switching between local and remote is one click in the sidebar.
 
 Local machine:
 
-- **DeepSeek Harness `0.2.1-rc.2` or `0.2.1-rc.3`** (Web or Desktop).
+- **DeepSeek Harness `0.2.1-rc.2`, `0.2.1-rc.3`, or `0.2.2-rc.1`** (Web or Desktop).
 - **Node.js 24 or newer** with **pnpm** available on `PATH` — required by
   `dsh plugin`.
 - **OpenSSH** on `PATH`. On Windows the plugin prefers
@@ -88,7 +88,7 @@ dsh plugin --profile web add github:feng-spinning/dsh-remote-modern
 
 # From a packed tarball
 npm pack
-dsh plugin --profile web add file:/absolute/path/to/dsh-remote-modern-0.2.2.tgz
+dsh plugin --profile web add file:/absolute/path/to/dsh-remote-modern-0.2.3.tgz
 
 # From a source checkout you intend to edit (symlinked)
 dsh plugin --profile web add link:/absolute/path/to/dsh-remote-modern
@@ -292,6 +292,7 @@ Plugin 0.2.2 also passed all 26 tests and real model reads between local Desktop
 unchanged prompts). The installed rc.3 workspace/navigation, layout transforms,
 history, tool registration and Desktop lease contracts were checked directly;
 this compatibility update did not repeat GUI automation.
+Plugin 0.2.3 adds local Desktop `0.2.2-rc.1` support, including its resource access Hooks and built-in context-menu actions. The native menu renderer, workspace dialogs and running-task archive confirmation are retained. The 26 tests include the new menu routing, host-qualified clipboard links, remote membership and disconnected controls. Verification uses the installed runtime contracts and real API/model calls; GUI automation was not repeated.
 See [HANDOFF.md](HANDOFF.md) for detailed verification evidence.
 
 ## Porting to another DSH version

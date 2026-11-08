@@ -1,5 +1,20 @@
 # 交接记录
 
+## 2026-11-08：0.2.3 适配本机 DSH 0.2.2-rc.1（已完成安装与验证）
+
+- 用户要求同步升级、本机重装、验证后推送 GitHub main；基线 806f4aa。实际维护仓库为本目录，保留上次不使用 Computer Use 的约定，仅验证 dahua。
+- 本机 Desktop 和内置 dsh 均为 0.2.2-rc.1。旧版 0.2.2 安装记录仍在，但 rows 为空、错误 incompatible-version、插件 API 404；新版扩展本机精确兼容范围至 0.2.1-rc.2 / rc.3 / 0.2.2-rc.1。
+- 新版 Harness 的内置菜单已迁至 contextMenus，旧菜单插槽只留外部扩展。已装饰原生 context-menu overlay，适配带 hostId 的复制链接、远端置顶/归档状态、重命名及工作区对话框；本地权限判断与其他菜单提供者保留，断线禁用 SSH 修改。归档与分支沿用原生确认/迁移提示。
+- npm run check 构建及 26 项测试全部通过；现有客户端测试扩展新版菜单、主机路由、离线、原生弹窗和重复卸载检查。实际安装版 UiWorkspaceService 的调用/方法、原版 MenuRegistry + registerSessionMenus 的菜单 ID、布局转换及浏览器租约契约均通过。
+- 官方 pluginManager/installBundle 安装最终 0.2.3 返回 application=applied；rows 恢复 ssh-remote-modern。最终 tgz 的 29 个文件与本机实际安装逐文件哈希一致，实际前端清单/带 revision 的组合模块 URL 已提供新版客户端；响应源码与构建产物一致（官方追加 sourceMappingURL 尾注）。app.asar SHA256 前后保持 5fa8a6b21bceb8f3e99e30efa2270efd0cc773a11e42aa0488f804a64b34e637。
+- dahua 实际连接成功，工作区 trials/fd_bpm/tpu/holograms，目录 41 项；继续复用远端 0.2.1-rc.2 和既有 reader revision f73f333abfc9e75d711a71eb98021bb4c3bbc68cedb229e3bcda7dc81ed42fc3，未升级远端运行时。
+- 双向真实模型验收通过：本机 4 页读完远端，远端 6 页读完本机；只调用 read_session，末页 hasMore=false，各读回两个随机口令，用户原文不变。页数按工具事件核对；远端模型最终自述成 5 页，实际 6 次工具调用完整，不能以自述覆盖事件证据。
+- 专用会话 session-1d9fd62a-0adb-4a07-9c84-3fc4321cea0a（本机）及 session-4499f72d-4fb4-4d26-9241-eae85a1eb5fe（dahua）已归档并重读确认，无在途验收任务。最终说明更新后的包重新热安装，连接、模块与两端分页接口再检通过；GUI 点击与视觉布局本次未重复验证。
+- 最终安装包：../../output/dsh-022rc1-20261108/release-023/dsh-remote-modern-0.2.3.tgz，SHA256 c37e435f0488e5f19eb6b518f27bd52e5308cbcf1d96e25d1e222d2985c7caa4。backup-before-023 保存旧插件、package/lock、cordis.yml/patch、pnpm-workspace.yaml；早期 release/ 和 final/ 是候选包，以 release-023 为准。
+- 证据/脚本均在 ../../output/dsh-022rc1-20261108/：validation-summary.json、install-release-result.json、install-verification.json、post-install-check.json、connection-check.json、runtime-contract-audit.json、native-menu-audit.json、e2e-state.json 和配套 .mjs。凭据仅在内存使用，不提交。
+- 当前本机 API 127.0.0.1:59692，重启后重新发现。沙箱 loopback EACCES / 临时 rename EPERM 在正常本机环境原样执行通过；直接 /plugins/... 的无 revision URL 404 不代表模块失败，须读取当前前端清单。没有剩余实施事项；用户已授权推送 main，不发布 npm 或额外 release/tag。
+- 实现依据见 [implementation-notes.md](implementation-notes.md)，菜单迁移经验见 [LESSONS.md](LESSONS.md)。
+
 ## 2026-10-26：0.2.2 适配本机 DSH rc.3（已本机安装并验证）
 
 - 用户要求随本机 DeepSeek Harness `0.2.1-rc.3` 升级插件，重新本机安装后 push GitHub。基线 `fd7b9b3`，本次插件版本 `0.2.2`。

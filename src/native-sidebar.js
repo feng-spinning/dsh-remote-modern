@@ -1,4 +1,5 @@
 const remoteKey = (host, id) => `ssh_${host.id}_${id}`;
+let nativeWorkspaceProps;
 function remoteIdentity(key) {
   if (typeof key !== 'string') return null;
   const host = snapshot.hosts.find(host => key.startsWith(`ssh_${host.id}_`));
@@ -66,6 +67,7 @@ function useHostBadges(container, model) {
 }
 
 function NativeWorkspaceAdapter({ Original, ...props }) {
+  nativeWorkspaceProps = props;
   const model = useModel(), container = useRef(null);
   const workspaces = props.useWorkspaces(x => x), sessions = props.useSessions(x => x), panelInfo = props.usePanelInfo(x => x);
   const remoteActive = panelInfo.activePanelId === 'ssh-remote-modern';
@@ -88,6 +90,21 @@ function NativeWorkspaceAdapter({ Original, ...props }) {
       useWorkspaces: (select = x => x) => select(merged.workspaces),
       useSessions: (select = x => x) => select(merged.sessions),
       usePanelInfo: (select = x => x) => select(remoteActive ? { ...panelInfo, activePanelId: null } : panelInfo),
+      ...(props.useSessionAccess && { useSessionAccess: (key, action) => {
+        const allowed = props.useSessionAccess(key, action), remote = remoteIdentity(key);
+        return remote ? remote.host.state === 'connected' : allowed;
+      } }),
+      ...(props.useWorkspaceAccess && { useWorkspaceAccess: (key, action) => {
+        const allowed = props.useWorkspaceAccess(key, action), remote = remoteIdentity(key);
+        return remote ? remote.host.state === 'connected' : allowed;
+      } }),
+      ...(props.useWorkspaceActionRequest && {
+        useWorkspaceActionRequest: (select = x => x) => {
+          const local = props.useWorkspaceActionRequest(x => x);
+          return select(model.workspaceActionRequest || local);
+        },
+        settleWorkspaceAction: () => { emit({ workspaceActionRequest: null }); props.settleWorkspaceAction(); },
+      }),
       open: key => {
         const remote = remoteIdentity(key);
         if (remote) void openRemote(remote.host, { sessionId: remote.id });
@@ -120,7 +137,57 @@ function NativeWorkspaceAdapter({ Original, ...props }) {
     model.error && h('div', { role: 'alert', style: { fontSize: 12, padding: 8, color: '#bd553a' } }, model.error));
 }
 
+// Harness 0.2.2 moved built-in actions out of the legacy menu slots. Keep its
+// menu renderer and other providers, adapting only the captured SSH target.
+function NativeContextMenuAdapter({ Original, ...props }) {
+  const model = useModel(), state = props.useStore(x => x), target = state.target;
+  const key = target?.kind === 'session' ? target.value.sessionId : target?.kind === 'workspace' ? target.value.workspaceId : undefined;
+  const remote = remoteIdentity(key), catalog = remote && model.catalogs[remote.host.id];
+  const pinned = catalog?.pinnedSessionIds.includes(remote.id), archived = catalog?.archivedSessionIds.includes(remote.id);
+  const menu = React.useMemo(() => ({ ...state, items: state.items.flatMap(item => {
+    if (!remote) return [item];
+    if (item.id === 'session.pin/pin') {
+      if (archived) return [];
+      return [{ ...item, label: nativeWorkspaceProps.t(pinned ? 'menu.unpinSession' : 'menu.pinSession'), icon: { key: pinned ? 'workspace.unpin' : 'workspace.pin' }, disabled: remote.host.state !== 'connected' }];
+    }
+    if (item.id === 'session.archive/archive') return [{ ...item,
+      label: nativeWorkspaceProps.t(archived ? 'menu.unarchiveSession' : 'menu.archiveSession'),
+      icon: { key: archived ? 'workspace.unarchive' : 'workspace.archive' },
+      commandId: archived ? undefined : item.commandId, disabled: remote.host.state !== 'connected' }];
+    if (['session.rename/rename', 'session.fork/fork', 'workspace.rename/rename', 'workspace.delete/delete'].includes(item.id))
+      return [{ ...item, disabled: remote.host.state !== 'connected' }];
+    return [item];
+  }) }), [state, remote?.host.state, pinned, archived]);
+  return h(Original, { ...props, useStore: (select = x => x) => select(menu), select: id => {
+    if (!menu.items.some(item => item.id === id && !item.disabled)) return;
+    if (target?.kind === 'session' && id === 'session.id/copy') {
+      props.close();
+      return copyReference(remote?.id || key, remote?.hostId || 'local');
+    }
+    if (!remote) return props.select(id);
+    // The native archive callback owns the running-task confirmation dialog;
+    // the native fork callback owns migration notices. Both already route
+    // through the patched uiWorkspace service with the captured SSH key.
+    if (id === 'session.fork/fork' || id === 'session.archive/archive' && !archived) return props.select(id);
+    let run;
+    if (target.kind === 'session') {
+      if (id === 'session.pin/pin') run = () => uiContext.uiWorkspace[pinned ? 'unpinSession' : 'pinSession'](key);
+      if (id === 'session.archive/archive') run = () => uiContext.uiWorkspace[archived ? 'unarchiveSession' : 'archiveSession'](key);
+      if (id === 'session.rename/rename') run = () => nativeWorkspaceProps.requestSessionRename(key, target.value.displayTitle);
+    } else if (target.kind === 'workspace' && ['workspace.rename/rename', 'workspace.delete/delete'].includes(id)) {
+      run = () => emit({ workspaceActionRequest: {
+        action: id === 'workspace.rename/rename' ? 'rename' : 'delete', workspaceId: key,
+        displayTitle: target.value.displayTitle, storedTitle: catalog.items.find(item => item.workspaceId === remote.id)?.title,
+      } });
+    }
+    if (!run) return props.select(id);
+    props.close();
+    return Promise.resolve().then(run).catch(error => emit({ error: error.message }));
+  } });
+}
+
 function installNativeSidebar(ctx) {
+  ctx.effect(() => () => { nativeWorkspaceProps = undefined; });
   // DSH permits only one declaration of each child slot. Decorate the existing
   // component seat so its store, child authority and lifecycle stay intact.
   const installed = new Map();
@@ -152,6 +219,7 @@ function installNativeSidebar(ctx) {
     });
   };
   watch('sidebar.workspaces', Original => props => h(NativeWorkspaceAdapter, { ...props, Original }));
+  watch('shell.overlay', Original => props => h(NativeContextMenuAdapter, { ...props, Original }), 'context-menu');
   for (const name of ['sidebar.workspaces.session.menu.item', 'sidebar.workspaces.session.row.action']) {
     for (const id of name.endsWith('menu.item') ? ['pin', 'archive', 'fork', 'session-id'] : ['pin', 'archive']) {
       watch(name, Original => function NativeSessionAction(props) {
